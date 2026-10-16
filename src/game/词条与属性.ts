@@ -547,15 +547,17 @@ export const BONUS_LAYER_NEED = 12
 
 /**
  * 第二档那五条加属性成就的门槛：各比同轴的前一条再深一截，五条轴一条不落。
- * 读的还是那几笔只涨不跌的累计，也都落在金丹开张之后——转盘抽到底、结丹结到二十层往上、
- * 灵气过结丹线再翻百万倍，练气那 40 分钟与结丹那条 12 小时的线都碰不着。
- * 五条摆在同一段里是有意的：走到这一步的玩家已经看过整条链，剩下的就该是"往里挖"。
+ * 只用层数、累计灵气、累计探索这三笔账——它们都跟着产出一起涨，往后总能摸到，
+ * 练气那 40 分钟与结丹那条 12 小时的线也碰不着。
+ * 独独不再摆累计凝练：转盘价按"见过的最高出丹流量"定标、废渣供给也拿同一把尺涨，两边约掉，
+ * 所以 time-to-N 抽几乎与流量无关（实测 150 抽≈12 天、170 抽≈4 个月、260 抽≈数年、400 抽挂满 3e13 秒也到不了）。
+ * 头一档里聚沙成塔那条压在 170 抽上，已经是这条墙上人还够得着的最后一格，往后再不往上加抽数门槛。
  */
-export const BONUS_TURNS_DEEP = 260
-export const BONUS_LAYER_DEEP = 20
 export const BONUS_EXPLORE_DEEP = 60
-export const BONUS_TURNS_PEAK = 400
+export const BONUS_LAYER_DEEP = 16
 export const BONUS_QI_DEEP = 1e36
+export const BONUS_LAYER_PEAK = 24
+export const BONUS_QI_PEAK = 1e39
 
 export const ACHIEVEMENTS: AchievementDef[] = [
   {
@@ -607,10 +609,10 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   },
   /**
    * 下面九条是加属性的，好处落在那五条现成的轴上，也都碰不着练气那条 40 分钟的锚：
-   * 出丹、废渣、按秒折点这三笔账本来就只有金丹开张之后才有；
-   * 走全部产出加法轴的那两条门槛是结到第 12 层与第 20 层丹；走灵气返哺的两条把门槛压在累计凝练上
-   * （抽卡那条墙很硬，抽得到 170 次的人必然早已把整条链走过几遍）；灵气那条压在累计灵气上。
-   * 头四条是头一遍走完这条链，后五条各再深一截——五条轴一条不落，废渣那条原本只有挑战和里程碑在给。
+   * 出丹、废渣、按秒折点这三笔账本来就只有金丹开张之后才有。
+   * 头四条各读一笔（累计灵气 1e33 / 累计凝练 170 / 累计探索 30 / 结到第 12 层），是头一遍走完这条链；
+   * 后五条各再深一截，五条轴一条不落——废渣那一条原本只有挑战和里程碑在给。
+   * 第二档一律不读抽数（理由见上面那串常量），改成再往层数、累计灵气、累计探索里挖。
    */
   {
     id: 'bonusDanYield',
@@ -652,8 +654,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     id: 'bonusDregMul',
     name: '返本还元',
     desc: '炸炉赔的废渣 1.25 倍',
-    need: BONUS_TURNS_DEEP,
-    metric: 'turns',
+    need: BONUS_EXPLORE_DEEP,
+    metric: 'explores',
     realm: '金丹',
     bonus: { dregMul: 1.25 },
   },
@@ -670,8 +672,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     id: 'bonusPassMore',
     name: '跬步千里',
     desc: '每秒进的筑基点 2.50 倍',
-    need: BONUS_EXPLORE_DEEP,
-    metric: 'explores',
+    need: BONUS_QI_DEEP,
+    metric: 'qi',
     realm: '金丹',
     bonus: { passMul: 2.5 },
   },
@@ -679,8 +681,8 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     id: 'bonusQiMore',
     name: '灵源不竭',
     desc: '丹炼回灵气 +35%',
-    need: BONUS_TURNS_PEAK,
-    metric: 'turns',
+    need: BONUS_LAYER_PEAK,
+    metric: 'layers',
     realm: '金丹',
     bonus: { qiAdd: 0.35 },
   },
@@ -688,7 +690,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     id: 'bonusEnergyMore',
     name: '气冲霄汉',
     desc: '灵气产出 +75%',
-    need: BONUS_QI_DEEP,
+    need: BONUS_QI_PEAK,
     metric: 'qi',
     realm: '金丹',
     bonus: { energyAdd: 0.75 },
