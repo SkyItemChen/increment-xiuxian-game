@@ -1,0 +1,149 @@
+/*
+ * 全局基础样式：只做重置与主题变量，组件样式各自 scoped。
+ * 组件里不要再写死色值，改主题只动这一段。
+ */
+
+:root {
+  color-scheme: light;
+
+  /* 天光底 */
+  --bg-top: #f4faff;
+  --bg-mid: #e4f0fb;
+  --bg-low: #d2e6f8;
+
+  /* 面板与描边 */
+  --surface: rgba(255, 255, 255, 0.66);
+  --surface-flat: rgba(255, 255, 255, 0.46);
+  --surface-raised: rgba(255, 255, 255, 0.82);
+  --tint: rgba(90, 150, 210, 0.1);
+  --tint-hover: rgba(90, 150, 210, 0.18);
+  --line: rgba(58, 112, 168, 0.18);
+  --line-soft: rgba(58, 112, 168, 0.1);
+  --line-strong: rgba(42, 96, 152, 0.34);
+
+  /* 字 */
+  --ink: #16395e;
+  --ink-dim: #4a6f95;
+  --ink-faint: #7f9cb8;
+  --ink-invert: #ffffff;
+
+  /* 主强调色，原先的金色位：标题、境界标签、突破 */
+  --accent: #1e7cc4;
+  --accent-soft: #5cb0e8;
+  --accent-deep: #134f82;
+  --accent-wash: rgba(30, 124, 196, 0.1);
+  --accent-line: rgba(30, 124, 196, 0.4);
+  --accent-glow: rgba(96, 172, 232, 0.4);
+
+  /* 灵气位，原先的青玉位：数值、吐纳进度条 */
+  --sky: #0d84c6;
+  --sky-soft: #6ec8f2;
+  --sky-deep: #0a5b8c;
+  --sky-wash: rgba(13, 132, 198, 0.1);
+  --sky-line: rgba(13, 132, 198, 0.42);
+
+  /* 厚按钮的侧壁与落地影 */
+  --edge-accent: #134f82;
+
+  /* 弹窗遮罩与投影 */
+  --veil: rgba(120, 158, 194, 0.42);
+  --shadow-panel: 0 18px 44px rgba(40, 88, 138, 0.16);
+
+  /* 得失两色（突破确认弹窗） */
+  --lose: #b0503c;
+  --lose-wash: rgba(190, 96, 70, 0.08);
+  --lose-line: rgba(176, 80, 60, 0.26);
+  --gain: #0b78a8;
+  --gain-wash: rgba(20, 130, 190, 0.07);
+  --gain-line: rgba(20, 130, 190, 0.26);
+
+  /* 法宝三档来头：凡品压成灰蓝，灵品占灵气那支青，仙品用紫——在一片蓝里必须跳得出来 */
+  --r-fan: #64809a;
+  --r-fan-wash: rgba(100, 128, 154, 0.1);
+  --r-fan-line: rgba(100, 128, 154, 0.3);
+  --r-ling: #0d84c6;
+  --r-ling-wash: rgba(13, 132, 198, 0.1);
+  --r-ling-line: rgba(13, 132, 198, 0.36);
+  --r-xian: #8a5cb8;
+  --r-xian-wash: rgba(138, 92, 184, 0.1);
+  --r-xian-line: rgba(138, 92, 184, 0.34);
+
+  --font-kai: 'STKaiti', 'KaiTi', 'Noto Serif SC', 'SimSun', serif;
+
+  font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  font-size: 16px;
+  line-height: 1.6; /* 无单位，可安全继承到大字号 */
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg-mid) 60%, var(--bg-low) 100%);
+  color: var(--ink);
+  overflow: hidden;
+}
+
+/* 脚手架残留的 #app 限宽会把手游以外的横屏全部吃掉，这里必须放开 */
+#app {
+  width: 100%;
+  max-width: none;
+  margin: 0;
+  min-height: 100dvh;
+  border: none;
+  text-align: initial;
+  display: block;
+}
+
+p {
+  margin: 0;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+}
+
+/*
+ * 法宝品质牌：探索弹窗、筑基页的清单都用它，
+ * 一个组件写一份必然写歪，所以放在全局里由 --r-* 三组变量供色。
+ */
+.rar {
+  flex: none;
+  padding: 1px 9px;
+  border: 1px solid;
+  border-radius: 999px;
+  font-size: 12px;
+  letter-spacing: 2px;
+  text-indent: 2px;
+  line-height: 1.7;
+}
+
+.rar-fan {
+  border-color: var(--r-fan-line);
+  background: var(--r-fan-wash);
+  color: var(--r-fan);
+}
+
+.rar-ling {
+  border-color: var(--r-ling-line);
+  background: var(--r-ling-wash);
+  color: var(--r-ling);
+}
+
+.rar-xian {
+  border-color: var(--r-xian-line);
+  background: var(--r-xian-wash);
+  color: var(--r-xian);
+}
