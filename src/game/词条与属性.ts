@@ -441,9 +441,11 @@ export function addBonus(sum: Bonus, add: Bonus): Bonus {
  * realm 记这条成就算在哪一境头上，成就页照它从上往下排——练气的在前，金丹的在后。
  *
  * 头六条成就是"解锁自动化"那一类，好处长在 `state.ts` 的门槛函数上，所以不带 bonus；
- * 后四条是加属性的，bonus 走下面 `Bonus` 那五条现成的轴，达成之后被动生效、没有领取那一步。
- * 这四条的好处**在金丹开张之前一律不咬合**（出丹、废渣、按秒折点这三样本来就只有金丹之后才有账），
+ * 后九条是加属性的，bonus 走下面 `Bonus` 那五条现成的轴，达成之后被动生效、没有领取那一步。
+ * 这九条的好处**在金丹开张之前一律不咬合**（出丹、废渣、按秒折点这三样本来就只有金丹之后才有账），
  * 所以练气那 40 分钟的锚点一条都碰不着；门槛也全摆在金丹这条链上能看到的那几笔累计里。
+ * 九条好处分两档：前四条是"头一遍走完这条链"的，后五条是链条上再深一截的，
+ * 五条轴一条不落各补一笔，所以没有哪条轴只有挑战和里程碑在撑。
  */
 export interface AchievementDef {
   id: string
@@ -543,18 +545,30 @@ export const BONUS_TURNS_NEED = 170
 export const BONUS_EXPLORE_NEED = 30
 export const BONUS_LAYER_NEED = 12
 
+/**
+ * 第二档那五条加属性成就的门槛：各比同轴的前一条再深一截，五条轴一条不落。
+ * 读的还是那几笔只涨不跌的累计，也都落在金丹开张之后——转盘抽到底、结丹结到二十层往上、
+ * 灵气过结丹线再翻百万倍，练气那 40 分钟与结丹那条 12 小时的线都碰不着。
+ * 五条摆在同一段里是有意的：走到这一步的玩家已经看过整条链，剩下的就该是"往里挖"。
+ */
+export const BONUS_TURNS_DEEP = 260
+export const BONUS_LAYER_DEEP = 20
+export const BONUS_EXPLORE_DEEP = 60
+export const BONUS_TURNS_PEAK = 400
+export const BONUS_QI_DEEP = 1e36
+
 export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'autoBuyCultivate',
     name: '无为而治',
-    desc: '解锁自动化购买练气法门',
+    desc: '练气法门自动购买',
     need: AUTO_BUY_UNLOCK_POINTS,
     realm: '练气',
   },
   {
     id: 'freeUpgradeCultivate',
     name: '不取一毫',
-    desc: '参悟练气法门不再消耗灵气——灵气够这一层的价就能悟进去',
+    desc: '参悟练气法门不耗灵气',
     need: FREE_UPGRADE_UNLOCK_INSIGHT,
     metric: 'insight',
     realm: '练气',
@@ -562,7 +576,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'autoBuyTrees',
     name: '丹成三转',
-    desc: '解锁自动化购买筑基根骨与鉴宝台',
+    desc: '筑基根骨、鉴宝台自动购买',
     need: JIEDAN_AUTO_UNLOCK_LAYERS,
     metric: 'layers',
     realm: '筑基',
@@ -570,7 +584,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'pointPass',
     name: '不劳而获',
-    desc: '练气不必再破境，筑基点改成按秒自动进账',
+    desc: '练气免破境，筑基点按秒进账',
     need: POINT_PASS_UNLOCK_QI,
     metric: 'qi',
     realm: '金丹',
@@ -578,7 +592,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'autoBuyPill',
     name: '一丹在手',
-    desc: '解锁自动化购买丹炉、火候与丹房',
+    desc: '丹炉、火候、丹房自动购买',
     need: PILL_AUTO_UNLOCK_LAYERS,
     metric: 'layers',
     realm: '金丹',
@@ -586,16 +600,17 @@ export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'autoBuyPull',
     name: '转过一圈',
-    desc: '解锁凝练转盘自动抽取',
+    desc: '凝练转盘自动抽取',
     need: PULL_AUTO_UNLOCK_TURNS,
     metric: 'turns',
     realm: '金丹',
   },
   /**
-   * 下面四条是加属性的，四条好处各占一条轴，也都碰不着练气那条 40 分钟的锚：
-   * 出丹与按秒折点这两笔账本来就只有金丹开张之后才有，
-   * 走灵气返哺的那一条把门槛压在累计凝练上（抽卡那条墙很硬，抽得到 170 次的人必然早已把整条链走过几遍），
-   * 走全部产出加法轴的那一条门槛是结到第 12 层丹。
+   * 下面九条是加属性的，好处落在那五条现成的轴上，也都碰不着练气那条 40 分钟的锚：
+   * 出丹、废渣、按秒折点这三笔账本来就只有金丹开张之后才有；
+   * 走全部产出加法轴的那两条门槛是结到第 12 层与第 20 层丹；走灵气返哺的两条把门槛压在累计凝练上
+   * （抽卡那条墙很硬，抽得到 170 次的人必然早已把整条链走过几遍）；灵气那条压在累计灵气上。
+   * 头四条是头一遍走完这条链，后五条各再深一截——五条轴一条不落，废渣那条原本只有挑战和里程碑在给。
    */
   {
     id: 'bonusDanYield',
@@ -632,6 +647,51 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     metric: 'layers',
     realm: '金丹',
     bonus: { energyAdd: 0.5 },
+  },
+  {
+    id: 'bonusDregMul',
+    name: '返本还元',
+    desc: '炸炉赔的废渣 1.25 倍',
+    need: BONUS_TURNS_DEEP,
+    metric: 'turns',
+    realm: '金丹',
+    bonus: { dregMul: 1.25 },
+  },
+  {
+    id: 'bonusDanMore',
+    name: '鼎中三昧',
+    desc: '每一炉的丹 +35%',
+    need: BONUS_LAYER_DEEP,
+    metric: 'layers',
+    realm: '金丹',
+    bonus: { danAdd: 0.35 },
+  },
+  {
+    id: 'bonusPassMore',
+    name: '跬步千里',
+    desc: '每秒进的筑基点 2.50 倍',
+    need: BONUS_EXPLORE_DEEP,
+    metric: 'explores',
+    realm: '金丹',
+    bonus: { passMul: 2.5 },
+  },
+  {
+    id: 'bonusQiMore',
+    name: '灵源不竭',
+    desc: '丹炼回灵气 +35%',
+    need: BONUS_TURNS_PEAK,
+    metric: 'turns',
+    realm: '金丹',
+    bonus: { qiAdd: 0.35 },
+  },
+  {
+    id: 'bonusEnergyMore',
+    name: '气冲霄汉',
+    desc: '灵气产出 +75%',
+    need: BONUS_QI_DEEP,
+    metric: 'qi',
+    realm: '金丹',
+    bonus: { energyAdd: 0.75 },
   },
 ]
 

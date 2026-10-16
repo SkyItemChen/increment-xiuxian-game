@@ -118,7 +118,7 @@ const probes = [
   ['只有三条线炼满', { pillLevels: { danLu: 99, huoHou: 99, danFang: 99 } }],
   ['只把转盘抽到底（连带百转成渣那条挑战）', { pulls: 1e6 }],
   ['只把七道精神参悟到底', { spirits: Object.fromEntries(SPIRITS.map((s) => [s.id, 99])) }],
-  ['四条成就全开（抽数那一条顺带咬合）', { qiLog10: 40, pulls: 1e6, explores: 99, jindan: 12 }],
+  ['九条成就全开（抽数那几条顺带咬合）', { qiLog10: 40, pulls: 1e6, explores: 99, jindan: 40 }],
 ]
 for (const [label, part] of probes) {
   const b = totalBonus({ ...ZERO, ...part })
@@ -181,5 +181,5 @@ for (const def of JINDAN_MILESTONES) {
 const clean = totalBonus(ZERO)
 console.log(`\n  空账上一档都不该生效：${clean.danAdd === 0 && clean.qiAdd === 0 && clean.energyAdd === 0 && clean.dregMul === 1 && clean.passMul === 1 ? '✓' : '✗ 有白给没门槛就咬合了'}`)
 console.log(`  和 noBonus() 同一本起点账：${JSON.stringify(clean) === JSON.stringify(noBonus()) ? '✓' : '✗'}`)
-console.log(`  成就那四条：${ACHIEVEMENTS.filter((d) => d.bonus).map((d) => `${d.name}[${d.metric} ${d.need}] ${d.desc}`).join(' · ')}`)
+console.log(`  成就那九条：${ACHIEVEMENTS.filter((d) => d.bonus).map((d) => `${d.name}[${d.metric} ${d.need}] ${d.desc}`).join(' · ')}`)
 console.log(`  挑战在高构筑那本的刻度：${CHALLENGES.map((d) => `${d.name} ${JSON.stringify(challengeMark(d.need, HIGH))}`).join(' · ')}`)
