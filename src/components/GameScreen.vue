@@ -27,6 +27,9 @@ import UpgradeList from './UpgradeList.vue'
 
 const emit = defineEmits<{ openSettings: [], openAutomation: [], openAchievements: [], openDev: [] }>()
 
+/** 测试页那颗只在 `npm run dev` 里露出来，发出去的版本上不认这条路 */
+const isDev = import.meta.env.DEV
+
 const spiritText = computed(() => fmt(shown.spirit))
 const gatherText = computed(() => fmt(state.spiritPerGather))
 const rateText = computed(() => fmt(state.spiritPerSecond))
@@ -115,7 +118,7 @@ const playTime = computed(() => {
       <span class="brand">问道长生</span>
       <div class="topbar-right">
         <span class="time">修行时长 {{ playTime }}</span>
-        <button class="gear dev" type="button" aria-label="测试" @click="emit('openDev')">
+        <button v-if="isDev" class="gear dev" type="button" aria-label="测试" @click="emit('openDev')">
           <span class="gear-icon">⚗</span>
           <span class="gear-text">测试</span>
         </button>
