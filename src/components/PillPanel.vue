@@ -4,6 +4,7 @@ import {
   buyAllPill,
   buyPill,
   fmt,
+  fmtNum,
   jindanBreak,
   jindanState,
   needJindanConfirm,
@@ -20,20 +21,22 @@ import {
 } from '../game/state'
 import { pillCurrent, PILL_MODES, type PillModeId } from '../game/词条与属性'
 import JindanDialog from './JindanDialog.vue'
+import ChallengePanel from './ChallengePanel.vue'
 import NinglianPanel from './NinglianPanel.vue'
 
 /**
- * 金丹页 = 丹炉三条线 + 火候三档 + 凝练转盘。
+ * 金丹页 = 丹炉三条线 + 火候三档 + 凝练转盘 + 挑战与结丹里程碑。
  * 灵气进炉出丹，丹买炉子、火候、丹房；炸炉赔出来的废渣抽丹道精神。
  * 炉子炼到第 12 级、手上又攒够那一世灵气，才结得成丹——结丹永远亲手按。
+ * 旁边那一栏「挑战」摆的是走过一遍这条链之后白给的好处，被动生效、不用领取。
  */
-const subTab = ref<'furnace' | 'ninglian'>('furnace')
+const subTab = ref<'furnace' | 'ninglian' | 'challenge'>('furnace')
 
 const danText = computed(() => fmt(shown.dan))
 const danRateText = computed(() => fmt(state.danPerSecond))
 const dregText = computed(() => fmt(shown.dreg))
 const spiritText = computed(() => fmt(shown.spirit))
-const layerText = computed(() => state.jindan.toLocaleString('en-US'))
+const layerText = computed(() => fmtNum(state.jindan))
 
 /** 火候那一排：三档并排，选中那档的效果与炸炉率写在下面一句 */
 const batch = computed<PillBatchQuote>(() => pillBatch())
@@ -134,9 +137,16 @@ function onConfirmJindan(): void {
         :class="{ on: subTab === 'ninglian' }"
         @click="subTab = 'ninglian'"
       >凝 练</button>
+      <button
+        type="button"
+        class="sub-tab"
+        :class="{ on: subTab === 'challenge' }"
+        @click="subTab = 'challenge'"
+      >挑 战</button>
     </nav>
 
     <NinglianPanel v-if="subTab === 'ninglian'" @back="subTab = 'furnace'" />
+    <ChallengePanel v-else-if="subTab === 'challenge'" @back="subTab = 'furnace'" />
 
     <div v-else class="pill">
       <section class="column core">

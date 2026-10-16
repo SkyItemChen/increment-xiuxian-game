@@ -32,10 +32,23 @@ import {
   type SpiritRoll,
 } from './凝练'
 import {
+  achievementUnlocked,
+  challengeMark,
+  danBonusAdd,
+  dregBonusMult,
+  energyBonusAdd,
+  milestoneUnlocked,
+  passBonusMult,
+  qiBonusAdd,
+  totalBonus,
+  type BonusCounters,
+} from './挑战'
+import {
   ALL_UPGRADES,
   ACHIEVEMENTS,
   AUTO_BUY_UNLOCK_POINTS,
   BUST_FLOOR,
+  CHALLENGES,
   DEFAULT_PILL_MODE,
   EXPLORE_TREE,
   FREE_UPGRADE_UNLOCK_INSIGHT,
@@ -47,6 +60,7 @@ import {
   GATHER_CRIT_MULT,
   JIEDAN_AUTO_UNLOCK_LAYERS,
   JIEDAN_FURNACE_LEVEL,
+  JINDAN_MILESTONES,
   metricLabel,
   OFFLINE_CAP_SECONDS,
   OFFLINE_REPORT_SECONDS,
@@ -62,7 +76,10 @@ import {
   spiritCurrent,
   TREASURES,
   type AchievementDef,
+  type Bonus,
+  type ChallengeDef,
   type ExploreDef,
+  type MilestoneDef,
   type PillLineDef,
   type PillModeDef,
   type PillModeId,
@@ -182,7 +199,7 @@ export interface GameState {
   exploreLevels: Record<string, number>
   /** 丹存量（可花费）。破境、探索、结丹都不散——它是金丹那一层的钱 */
   dan: BigNumber
-  /** 出丹速率（每秒），已含炉子、火候与武火。炸炉不吃这一条，它是"炼成时给多少" */
+  /** 出丹速率（每秒），已含炉子、火候、武火与挑战白给的那几成。炸炉不吃这一条，它是"炼成时给多少" */
   danPerSecond: BigNumber
   /** 丹炉三条线的等级 */
   pillLevels: Record<string, number>
@@ -293,11 +310,21 @@ export function refreshDisplay(): void {
   shown.dreg = state.dreg.clone()
   shown.totalTime = state.totalTime
   displayAcc = 0
+  // 这里是一切数值结算的收口，成就报条就搭在这儿比对新旧
+  checkAchievements()
 }
 
 /** 全局数字显示：记法跟随设置，界面上的数字都走这里 */
 export function fmt(n: BigNumber, decimals = 2): string {
   return n.format(decimals, state.settings.numberFormat)
+}
+
+/**
+ * 普通 number（见识、筑基点、押注、价目这些账）也走同一套记法。
+ * 后台存的还是 number，只是摆到界面上得跟灵气一样缩写，别再甩一串原始长数字撑爆框。
+ */
+export function fmtNum(n: number, decimals = 2): string {
+  return BigNumber.from(n).format(decimals, state.settings.numberFormat)
 }
 
 /**
@@ -543,6 +570,29 @@ export function priceCut(): number {
 }
 
 /**
+ * 挑战、结丹里程碑、加属性成就这三张表要读的那几笔累计。
+ * 摆在 state 这一头、判定放在 [挑战.ts](./挑战.ts)：那个模块收数不算账，`sim/` 才能拿同一份表跑同一套判定。
+ * 每一条读的都是只涨不跌的账——散功清的是手上的灵气与法门修为，这些一笔都不动。
+ */
+function counters(): BonusCounters {
+  return {
+    pillLevels: state.pillLevels,
+    spirits: state.spirits,
+    pulls: state.pulls,
+    jindan: state.jindan,
+    insightEarned: state.insightEarned,
+    explores: state.explores,
+    pointsEarned: state.pointsEarned,
+    qiLog10: state.totalEarned.log10(),
+  }
+}
+
+/** 眼下一共白给多少。没有存档字段、也不缓存：达成与否随时从上面那几笔账推出来 */
+export function activeBonus(): Bonus {
+  return totalBonus(counters())
+}
+
+/**
  * 由法门等级重算产出。
  * 每个境界各自结算再累加：练气的聚灵阵眼只改写练气自己的单级加成，不会顺带把筑基也放大，
  * 否则乘法法门跨境界叠加会让产出爆掉境界阈值。根基倍率与速度则跨境界连乘，升级不白买。
@@ -550,10 +600,12 @@ export function priceCut(): number {
  * 法宝是探索带出来的家当，聚宝盆补在产出里、乾坤鼎把总产出连乘起来。
  * 丹房与结丹回溯都挂在道基那条加法轴上：这条轴乘在整份产出上，所以一世时长严格被它除掉，
  * 这正是结丹回溯要的效果（+100%/层 ⇒ 一世除以 (1+层数)）。
+ * 挑战、结丹里程碑、加属性成就白给的那几笔（`activeBonus()`）也添在这几条现成的轴上，不新起第六条轴。
  */
 export function recompute(): void {
   const { globalAdd, outputAdd, critChance } = rebirthMods()
   const t = treasureMods()
+  const bonus = activeBonus()
   // 淬炼改版后和道基共用这条加法轴（两个货币买同一条轴的先例是悟性与玄铜镜）
   const energyAdd = globalAdd + exploreMods().energyAdd
   let perSecond = BigNumber.zero()
@@ -567,9 +619,9 @@ export function recompute(): void {
     speed *= p.speedMult.toNumber()
   }
   const back =
-    (1 + energyAdd + spiritEnergyAdd(state.spirits)) *
+    (1 + energyAdd + spiritEnergyAdd(state.spirits) + energyBonusAdd(bonus)) *
     jindanReturnMult(state.jindan) *
-    (1 + qiAxisAdd(state.pillLevels, state.spirits))
+    (1 + qiAxisAdd(state.pillLevels, state.spirits) + qiBonusAdd(bonus))
   const rate = BigNumber.from(GATHER_BASE)
     .mul(gatherMult)
     .add(perSecond)
@@ -584,7 +636,10 @@ export function recompute(): void {
   // 定价锚只涨不跌：故意自废流量（押一铲探索）再来买丹讨不到便宜
   const flow = state.spiritPerSecond.log10()
   if (flow > state.pillAnchor) state.pillAnchor = flow
-  state.danPerSecond = pillRate(state.spiritPerSecond, state.pillLevels).mulNumber(danYieldMult(state.spirits))
+  // 武火那几成丹之外，挑战/里程碑/成就白给的几成也添在同一个加数上
+  state.danPerSecond = pillRate(state.spiritPerSecond, state.pillLevels).mulNumber(
+    danYieldMult(state.spirits) + danBonusAdd(bonus),
+  )
 }
 
 function earn(gain: BigNumber): void {
@@ -678,22 +733,25 @@ export interface AchievementRow {
   progress: string
 }
 
-/** 筑基点、见识、结丹层数、凝练抽数这几笔累计现在有多少 */
+/** 成就看的那几笔小账如今有多少（累计灵气那一笔走 BigNumber，由 achievementRow 自己判） */
 function achievementEarned(metric: AchievementDef['metric']): number {
   if (metric === 'insight') return state.insightEarned
   if (metric === 'layers') return state.jindan
   if (metric === 'turns') return state.pulls
+  if (metric === 'explores') return state.explores
   return state.pointsEarned
 }
 
 /**
- * 一条成就的达成与进度。前三笔账都是小数目，直接念"还差几个"；
- * 灵气那一笔动不动上百位，做减法念出来没人看得懂，所以把门槛和如今两头各报一遍。
+ * 一条成就的达成与进度。达成与否走 `挑战.ts` 那唯一一份判定——白给的好处也照它添。
+ * 除了灵气那一笔，账都是小数目，直接念"还差几个"；灵气动不动上百位，做减法念出来没人看得懂，
+ * 所以那一笔把门槛和如今两头各报一遍。
  */
 function achievementRow(def: AchievementDef): AchievementRow {
+  const unlocked = achievementUnlocked(def, counters())
   if (def.metric === 'qi') {
     const need = BigNumber.from(def.need)
-    if (state.totalEarned.gte(need)) return { def, unlocked: true, progress: '' }
+    if (unlocked) return { def, unlocked: true, progress: '' }
     return { def, unlocked: false, progress: `灵气攒到 ${fmt(need)} 就开 · 如今 ${fmt(state.totalEarned)}` }
   }
   const left = def.need - achievementEarned(def.metric)
@@ -704,6 +762,115 @@ function achievementRow(def: AchievementDef): AchievementRow {
 /** 成就页那面账本：按境界从练气往下排，同一境内照词条写的顺序 */
 export function achievementRows(): AchievementRow[] {
   return ACHIEVEMENTS.map(achievementRow).sort((a, b) => realmRank(a.def.realm) - realmRank(b.def.realm))
+}
+
+/** 一条刚达成的成就，摆在屏角念一声用 */
+export interface AchievementNotice {
+  id: string
+  name: string
+  desc: string
+}
+
+/**
+ * 新达成成就的报条队列。成就是推出来的、不存字段，所以要跨帧比一比才知道哪条是"这一下才达成"。
+ * 记一份已达成的 id 集合，`refreshDisplay` 每次结算时对一遍，多出来的就压进队列由界面逐条报掉。
+ */
+export const achievementNotices = ref<AchievementNotice[]>([])
+
+let knownAchievements = new Set<string>()
+let achievementsSeeded = false
+
+/**
+ * 洗掉比对基准：读档、导入、格式化之后，现有的达成一律认作"本来就是"，
+ * 只有往后新达成的才报——否则读一份老存档会把它里面积累的几十条一次性全报出来。
+ */
+export function reseedAchievements(): void {
+  knownAchievements = new Set()
+  achievementsSeeded = false
+  achievementNotices.value.length = 0
+}
+
+/** 比一比这一下新达成了哪几条。第一次进来只认基准、不报，免得读档时炸一串 */
+function checkAchievements(): void {
+  const c = counters()
+  const unlocked = ACHIEVEMENTS.filter((def) => achievementUnlocked(def, c))
+  if (!achievementsSeeded) {
+    for (const def of unlocked) knownAchievements.add(def.id)
+    achievementsSeeded = true
+    return
+  }
+  for (const def of unlocked) {
+    if (knownAchievements.has(def.id)) continue
+    knownAchievements.add(def.id)
+    achievementNotices.value.push({ id: def.id, name: def.name, desc: def.desc })
+  }
+}
+
+/** 金丹页「挑战」那一栏的一行 */
+export interface ChallengeRow {
+  def: ChallengeDef
+  /** 现在到哪一格，与 need 同单位 */
+  now: number
+  need: number
+  unlocked: boolean
+  /** 没达成时念这一句；达成了留空 */
+  progress: string
+}
+
+/** 三档条件各有各的刻度：三条线数级、转盘数次、精神数那道 */
+function needUnit(need: ChallengeDef['need']): string {
+  if (need.kind === 'pill') return '级'
+  if (need.kind === 'pulls') return '次'
+  return '道'
+}
+
+/** 挑战那一栏：五条各报"现在到哪 / 还差多少"，判定与白给的好处同走 `挑战.ts` */
+export function challengeRows(): ChallengeRow[] {
+  const c = counters()
+  return CHALLENGES.map((def) => {
+    const mark = challengeMark(def.need, c)
+    const left = mark.need - mark.now
+    return {
+      def,
+      now: mark.now,
+      need: mark.need,
+      unlocked: left <= 0,
+      progress: left <= 0 ? '' : `还差 ${left} ${needUnit(def.need)}`,
+    }
+  })
+}
+
+/** 结丹里程碑的一行 */
+export interface MilestoneRow {
+  def: MilestoneDef
+  unlocked: boolean
+  progress: string
+}
+
+/** 已结几层丹对上的那一串台阶 */
+export function milestoneRows(): MilestoneRow[] {
+  const c = counters()
+  return JINDAN_MILESTONES.map((def) => {
+    const unlocked = milestoneUnlocked(def, c)
+    return { def, unlocked, progress: unlocked ? '' : `还要再结 ${def.layer - c.jindan} 层` }
+  })
+}
+
+/**
+ * 眼下这三张表一共白给多少，一行一句大白话。
+ * 加法的几条写成"多几成"，乘法的几条写成"几倍"——界面上不出现 ×1.5 这种实现层的写法。
+ */
+export function bonusSummary(): string[] {
+  const b = activeBonus()
+  const pct = (v: number) => `+${Math.round(v * 100)}%`
+  const times = (v: number) => `${v.toFixed(2)} 倍`
+  const out: string[] = []
+  if (b.danAdd) out.push(`每一炉的丹 ${pct(b.danAdd)}`)
+  if (b.qiAdd) out.push(`丹炼回灵气 ${pct(b.qiAdd)}`)
+  if (b.energyAdd) out.push(`灵气产出 ${pct(b.energyAdd)}`)
+  if ((b.dregMul ?? 1) !== 1) out.push(`炸炉赔的废渣 ${times(b.dregMul ?? 1)}`)
+  if ((b.passMul ?? 1) !== 1) out.push(`每秒进的筑基点 ${times(b.passMul ?? 1)}`)
+  return out
 }
 
 /** 累计见识够不够开"参悟不耗灵气"这条成就 */
@@ -806,10 +973,12 @@ export function pointLump(earned: BigNumber): number {
   return pointsForLoop(earned, realm.breakThrough as BigNumber, state.loops) + breakBonus()
 }
 
-/** 每秒折给玩家的筑基点（未取整），界面念的就是这个数。定息把它往上乘，cap 在词条表里 */
+/** 每秒折给玩家的筑基点（未取整），界面念的就是这个数。定息把它往上乘，cap 在词条表里；火候到家那条挑战也乘在这一条上 */
 export function pointPassPerSecond(): number {
   if (!pointPassActive()) return 0
-  return pointLump(state.totalEarned) * POINT_PASS_RATE * pointPassMult(state.spirits)
+  return (
+    pointLump(state.totalEarned) * POINT_PASS_RATE * pointPassMult(state.spirits) * passBonusMult(activeBonus())
+  )
 }
 
 /**
@@ -1149,8 +1318,9 @@ export function pillBatch(): PillBatchQuote {
   const mode = findPillMode(state.pillMode)
   const bust = bustChance(mode, state.spirits)
   const dan = state.danPerSecond.mulNumber(PILL_PERIOD * mode.yieldMult)
-  // 渣按"这一炉该出的丹"折，所以先把 yieldMult 除掉，回到该出丹那一档
-  const dreg = dan.mulNumber(dregYieldMult(mode, state.spirits) / mode.yieldMult)
+  // 渣按"这一炉该出的丹"折，所以先把 yieldMult 除掉，回到该出丹那一档；
+  // 百转成渣、见微知著那两条白给的赔率整体乘在这一笔上
+  const dreg = dan.mulNumber((dregYieldMult(mode, state.spirits) * dregBonusMult(activeBonus())) / mode.yieldMult)
   return { mode, dan, dreg, bust, floored: bust <= BUST_FLOOR }
 }
 
@@ -1167,7 +1337,8 @@ export function setPillMode(id: PillModeId): void {
  * 所以它不需要另设一个锚。
  */
 function dregFlow(): number {
-  return pillFlowLog10(state.pillAnchor) + Math.log10(danYieldMult(state.spirits))
+  const bonus = activeBonus()
+  return pillFlowLog10(state.pillAnchor) + Math.log10(danYieldMult(state.spirits) + danBonusAdd(bonus))
 }
 
 /** 抽一次转盘的报价 */
@@ -1712,6 +1883,8 @@ function applySave(d: Partial<SaveData>): boolean {
   danAcc = 0
   state.pillProgress = 0
   recompute()
+  // 换了一份进度，比对基准要跟着换：这份档里早就达成的成就别再报一遍
+  reseedAchievements()
   refreshDisplay()
   hasSave.value = true
   return true
@@ -1830,6 +2003,8 @@ export function resetGame(): void {
   lastReal = Date.now()
   offlineReport.value = null
   recompute()
+  // 格式化把进度退回开局，已达成的成就也一并退回未达成，比对基准跟着清空
+  reseedAchievements()
   refreshDisplay()
   hasSave.value = false
 }
@@ -1875,7 +2050,9 @@ function settlePillBatches(cycles: number): void {
   if (ok > 0) state.dan = state.dan.add(state.danPerSecond.mulNumber(ok * PILL_PERIOD * mode.yieldMult))
   if (busts > 0)
     state.dreg = state.dreg.add(
-      state.danPerSecond.mulNumber(PILL_PERIOD * dregYieldMult(mode, state.spirits) * busts),
+      state.danPerSecond.mulNumber(
+        PILL_PERIOD * dregYieldMult(mode, state.spirits) * dregBonusMult(activeBonus()) * busts,
+      ),
     )
 }
 /** 上一次结过账的墙钟时刻（毫秒）。闭关那一段就是从这里数到"现在" */

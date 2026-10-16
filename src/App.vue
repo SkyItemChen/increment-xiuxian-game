@@ -1,7 +1,9 @@
 <script setup lang="ts">
 import { onMounted, onUnmounted, ref, watch } from 'vue'
+import AchievementToast from './components/AchievementToast.vue'
 import AchievementsPage from './components/AchievementsPage.vue'
 import AutomationPage from './components/AutomationPage.vue'
+import ChangelogPage from './components/ChangelogPage.vue'
 import DevPage from './components/DevPage.vue'
 import GameScreen from './components/GameScreen.vue'
 import SettingsPage from './components/SettingsPage.vue'
@@ -11,8 +13,8 @@ import { bootGameLoop, state, stopGameLoop } from './game/state'
 onMounted(bootGameLoop)
 onUnmounted(stopGameLoop)
 
-/** 设置、自动化、成就、测试各是一整页。修行画面留着不销毁，回来时还站在原来那个境界标签上 */
-const page = ref<'game' | 'settings' | 'automation' | 'achievements' | 'dev'>('game')
+/** 设置、自动化、成就、日志、测试各是一整页。修行画面留着不销毁，回来时还站在原来那个境界标签上 */
+const page = ref<'game' | 'settings' | 'automation' | 'achievements' | 'changelog' | 'dev'>('game')
 
 /**
  * 画面被打回开始页的那一刻（格式化数据就是这么走的），选页那一下还留在 App 上没松手，
@@ -35,12 +37,16 @@ watch(
         @open-settings="page = 'settings'"
         @open-automation="page = 'automation'"
         @open-achievements="page = 'achievements'"
+        @open-changelog="page = 'changelog'"
         @open-dev="page = 'dev'"
       />
       <SettingsPage v-if="page === 'settings'" @back="page = 'game'" />
       <AutomationPage v-if="page === 'automation'" @back="page = 'game'" />
       <AchievementsPage v-if="page === 'achievements'" @back="page = 'game'" />
+      <ChangelogPage v-if="page === 'changelog'" @back="page = 'game'" />
       <DevPage v-if="page === 'dev'" @back="page = 'game'" />
+      <!-- 成就报条挂在这一层，切到哪一页都照报 -->
+      <AchievementToast />
     </div>
   </Transition>
 </template>

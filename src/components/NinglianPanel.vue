@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, onUnmounted, ref } from 'vue'
-import { fmt, pull, pullQuote, spiritRows, state, type PullQuote, type SpiritQuote } from '../game/state'
+import { fmt, fmtNum, pull, pullQuote, spiritRows, state, type PullQuote, type SpiritQuote } from '../game/state'
 import { SPIRITS, spiritCurrent } from '../game/词条与属性'
 import { type SpiritRoll } from '../game/凝练'
 import { nextRoll } from '../game/explore'
@@ -10,7 +10,7 @@ import { nextRoll } from '../game/explore'
  * 抽到已经抽过的不空手——它升级。敏手与定息各有顶，抽满了照收废渣、等级不动。
  */
 const dregText = computed(() => fmt(state.dreg))
-const pullsText = computed(() => state.pulls.toLocaleString('en-US'))
+const pullsText = computed(() => fmtNum(state.pulls))
 const rows = computed<SpiritQuote[]>(() => spiritRows())
 const quote = computed<PullQuote>(() => pullQuote())
 

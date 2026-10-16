@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fmt, type OfflineReport } from '../game/state'
+import { fmt, fmtNum, type OfflineReport } from '../game/state'
 
 /**
  * 「出关」字据：人不在的这一段补齐的进项，一张纸念完。
@@ -42,7 +42,7 @@ const danText = computed(() =>
           </li>
           <li v-if="report.gathers > 0">
             <span class="key">吐纳</span>
-            <span class="val">{{ report.gathers.toLocaleString('en-US') }} 次</span>
+            <span class="val">{{ fmtNum(report.gathers) }} 次</span>
           </li>
           <li v-if="danText">
             <span class="key">丹炼成</span>
@@ -54,7 +54,7 @@ const danText = computed(() =>
           </li>
           <li v-if="report.points > 0">
             <span class="key">筑基点折进</span>
-            <span class="val">{{ report.points.toLocaleString('en-US') }} 点</span>
+            <span class="val">{{ fmtNum(report.points) }} 点</span>
           </li>
         </ul>
         <p class="note">

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fmt, state, type BreakPreview } from '../game/state'
+import { fmt, fmtNum, state, type BreakPreview } from '../game/state'
 
 /** 突破确认弹窗：把"这一世清掉什么、换到什么"摊开来说，玩家点确认才真清 */
 const props = defineProps<{ preview: BreakPreview }>()
@@ -13,7 +13,7 @@ const wipedText = computed(() =>
 const noneText = computed(() => props.preview.wiped.length === 0)
 
 /** 弹窗在 breakThrough() 之前算好，所以来世就是 loops+1 */
-const nextLifeText = computed(() => (state.loops + 2).toLocaleString('en-US'))
+const nextLifeText = computed(() => fmtNum(state.loops + 2))
 </script>
 
 <template>
@@ -48,7 +48,7 @@ const nextLifeText = computed(() => (state.loops + 2).toLocaleString('en-US'))
           </li>
           <li>
             <span class="key">筑基点</span>
-            <span class="val strong">+{{ preview.points }}</span>
+            <span class="val strong">+{{ fmtNum(preview.points) }}</span>
           </li>
           <li v-if="preview.bonus">
             <span class="key">缘法 · 法宝</span>

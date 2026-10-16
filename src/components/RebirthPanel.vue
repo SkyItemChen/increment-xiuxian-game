@@ -6,6 +6,7 @@ import {
   buyRebirth,
   exploreGate,
   fmt,
+  fmtNum,
   pillUnlocked,
   pointPassPerSecond,
   rebirthGrowthCut,
@@ -34,9 +35,9 @@ function pickExplore(): void {
 }
 
 /** 破境攒来的筑基点在这里花掉，买到的等级不随下一次破境清零 */
-const pointsText = computed(() => state.points.toLocaleString('en-US'))
+const pointsText = computed(() => fmtNum(state.points))
 const loopText = computed(() => fmt(shown.loopEarned))
-const lifeText = computed(() => (state.loops + 1).toLocaleString('en-US'))
+const lifeText = computed(() => fmtNum(state.loops + 1))
 const nextGate = computed(() => realmToBreakThrough())
 
 const nextPoints = computed(() => {
@@ -147,7 +148,7 @@ function currentText(row: RebirthQuote): string {
                 :class="{ ready: state.points >= row.cost }"
                 :disabled="state.points < row.cost"
                 @click="buyRebirth(row.def.id, 1)"
-              >{{ row.cost }} 点</button>
+              >{{ fmtNum(row.cost) }} 点</button>
               <button
                 class="buy"
                 type="button"

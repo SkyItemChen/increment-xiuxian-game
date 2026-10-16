@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fmt, state } from '../game/state'
+import { fmt, fmtNum, state } from '../game/state'
 import type { ExploreOutcome } from '../game/explore'
 import { RARITY_LABELS, RARITY_ORDER, type TreasureDef, type TreasureRarity } from '../game/词条与属性'
 
@@ -58,7 +58,7 @@ const stacks = computed<Stack[]>(() => {
         <ul class="lines">
           <li>
             <span class="key">筑基点</span>
-            <span class="val strong">{{ outcome.stake }} 点</span>
+            <span class="val strong">{{ fmtNum(outcome.stake) }} 点</span>
           </li>
           <li>
             <span class="key">散去灵气</span>
@@ -93,11 +93,11 @@ const stacks = computed<Stack[]>(() => {
           </li>
           <li>
             <span class="key">押注折算</span>
-            <span class="val">+{{ outcome.stakeInsight }} 见识</span>
+            <span class="val">+{{ fmtNum(outcome.stakeInsight) }} 见识</span>
           </li>
           <li v-if="outcome.insight">
             <span class="key">圆满折算</span>
-            <span class="val">+{{ outcome.insight }} 见识</span>
+            <span class="val">+{{ fmtNum(outcome.insight) }} 见识</span>
           </li>
         </ul>
         <p class="note">法宝与鉴宝台跟着你一世一世走，下一次探索、下一次破境都清不掉它们。</p>

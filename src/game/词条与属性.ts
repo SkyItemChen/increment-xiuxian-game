@@ -275,10 +275,10 @@ export interface ExploreDef {
  * 等级 ≈ log(见识)，价格自己就是天花板。
  */
 export const EXPLORE_TREE: ExploreDef[] = [
-  { id: 'yanLi', name: '眼力', effect: '每级让好宝物的出土机会涨一成，四级起才看得见仙品', kind: 'luck', power: 0.1 },
-  { id: 'cuiLian', name: '淬炼', effect: '每级 +5% 全部灵气产出', kind: 'energy-add', power: 0.05 },
-  { id: 'shouZi', name: '收资', effect: '每级多攒两成见识', kind: 'insight-gain', power: 0.2 },
-  { id: 'tieChan', name: '铁铲', effect: '每级多挖一铲', kind: 'draw-add', power: 1 },
+  { id: 'yanLi', name: '眼力', effect: '识得箱底宝。每级出土机会 +10%，四级起可见仙品', kind: 'luck', power: 0.1 },
+  { id: 'cuiLian', name: '淬炼', effect: '凡铁也炼出光。每级 +5% 全部灵气产出', kind: 'energy-add', power: 0.05 },
+  { id: 'shouZi', name: '收资', effect: '出门多讨些。每级多攒 20% 见识', kind: 'insight-gain', power: 0.2 },
+  { id: 'tieChan', name: '铁铲', effect: '手快铲也多。每级多挖一铲', kind: 'draw-add', power: 1 },
 ]
 
 export function findExplore(id: string): ExploreDef | undefined {
@@ -357,7 +357,7 @@ export const TREASURES: TreasureDef[] = [
   { id: 'hunDunZhong', name: '混沌钟', rarity: 'xian', kind: 'point-back', power: 2, cap: 3,
     effect: '每层破境时多给 2 筑基点', lore: '钟声一响，天地初开的东西都记下了。' },
   { id: 'zaoHuaYuDie', name: '造化玉碟', rarity: 'xian', kind: 'explore-luck', power: 0.6, cap: 3,
-    effect: '每层让好宝物的出土机会涨六成，仙品涨得比这更快', lore: '造化都写在上面，只是没人读得全。' },
+    effect: '每层让好宝物的出土机会 +60%，仙品涨得比这更快', lore: '造化都写在上面，只是没人读得全。' },
 ]
 
 /** 紫金葫芦一次会心给几倍——概率按层叠，倍率固定，免得两个数字一起飘 */
@@ -401,9 +401,49 @@ export function treasureCurrent(
 }
 
 /**
+ * 挑战、里程碑、成就这三张表共用的"白给好处"的形状——**只有这五条轴**，
+ * 每条都是链上现成的加数或乘数，新玩法不许另起第六条：
+ *  - danAdd    添在 `凝练.ts` 的 `danYieldMult` 那同一个加数上，等于武火那种"每一炉多炼几成丹"
+ *  - qiAdd     加进丹房那条灵气返哺加法轴（和丹房、通灵共用一个加数，一起被 √定价吃回去）
+ *  - energyAdd 加进道基/淬炼/结丹那条全部产出加法轴
+ *  - dregMul   炸一炉赔的废渣整体乘这个数（只喂转盘，转盘不竖墙）
+ *  - passMul   按秒折给玩家的筑基点整体乘这个数（那条进项本来就被对数压平）
+ *
+ * 加法的几条是"再往同一个加数上添一笔"，乘法的几条出厂是 1，所以聚合从 `noBonus()` 起累加。
+ */
+export interface Bonus {
+  danAdd?: number
+  qiAdd?: number
+  energyAdd?: number
+  dregMul?: number
+  passMul?: number
+}
+
+/** 聚合的起点：三条加法清零、两条乘法置一 */
+export function noBonus(): Bonus {
+  return { danAdd: 0, qiAdd: 0, energyAdd: 0, dregMul: 1, passMul: 1 }
+}
+
+/** 把一条好处并进取和的那本账（加法轴相加、乘法轴相乘），不改传入的对象 */
+export function addBonus(sum: Bonus, add: Bonus): Bonus {
+  return {
+    danAdd: (sum.danAdd ?? 0) + (add.danAdd ?? 0),
+    qiAdd: (sum.qiAdd ?? 0) + (add.qiAdd ?? 0),
+    energyAdd: (sum.energyAdd ?? 0) + (add.energyAdd ?? 0),
+    dregMul: (sum.dregMul ?? 1) * (add.dregMul ?? 1),
+    passMul: (sum.passMul ?? 1) * (add.passMul ?? 1),
+  }
+}
+
+/**
  * 成就看的都是**历史累计**：花掉不减、探索清零也不减，
  * 所以解锁一次就一直开着，不会把已经交给系统代跑的活又收回来。
  * realm 记这条成就算在哪一境头上，成就页照它从上往下排——练气的在前，金丹的在后。
+ *
+ * 头六条成就是"解锁自动化"那一类，好处长在 `state.ts` 的门槛函数上，所以不带 bonus；
+ * 后四条是加属性的，bonus 走下面 `Bonus` 那五条现成的轴，达成之后被动生效、没有领取那一步。
+ * 这四条的好处**在金丹开张之前一律不咬合**（出丹、废渣、按秒折点这三样本来就只有金丹之后才有账），
+ * 所以练气那 40 分钟的锚点一条都碰不着；门槛也全摆在金丹这条链上能看到的那几笔累计里。
  */
 export interface AchievementDef {
   id: string
@@ -415,10 +455,11 @@ export interface AchievementDef {
   /** 看哪一笔累计：默认是累计筑基点，探索那条看累计见识，金丹那条看累计灵气 */
   metric?: AchievementMetric
   realm: AchievementRealm
+  bonus?: Bonus
 }
 
-/** 成就的进度来源；layers 看已结成的金丹层数，只涨不跌；qi 看累计灵气到过多少；turns 看累计转过多少次凝练 */
-export type AchievementMetric = 'points' | 'insight' | 'layers' | 'qi' | 'turns'
+/** 成就的进度来源；layers 看已结成的金丹层数，只涨不跌；qi 看累计灵气到过多少；turns 看累计转过多少次凝练；explores 看累计押过多少次铲 */
+export type AchievementMetric = 'points' | 'insight' | 'layers' | 'qi' | 'turns' | 'explores'
 
 /** 成就挂在哪一境名下 */
 export type AchievementRealm = '练气' | '筑基' | '金丹'
@@ -492,6 +533,16 @@ export const ONLINE_FRAME_MAX_SECONDS = 5
  */
 export const OFFLINE_REPORT_SECONDS = 60
 
+/**
+ * 加属性那四条成就的门槛。四条各读一笔只涨不跌的累计账，都摆在金丹这条链上：
+ * 灵气那一笔要过结丹门槛再攒一千倍，见识那一笔换成"结到第 12 层"——抽卡那条墙很硬，
+ * 累计凝练能摸到 170 次的玩家本来就已经把这条链走过好几遍了。
+ */
+export const BONUS_QI_NEED = 1e33
+export const BONUS_TURNS_NEED = 170
+export const BONUS_EXPLORE_NEED = 30
+export const BONUS_LAYER_NEED = 12
+
 export const ACHIEVEMENTS: AchievementDef[] = [
   {
     id: 'autoBuyCultivate',
@@ -540,6 +591,48 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     metric: 'turns',
     realm: '金丹',
   },
+  /**
+   * 下面四条是加属性的，四条好处各占一条轴，也都碰不着练气那条 40 分钟的锚：
+   * 出丹与按秒折点这两笔账本来就只有金丹开张之后才有，
+   * 走灵气返哺的那一条把门槛压在累计凝练上（抽卡那条墙很硬，抽得到 170 次的人必然早已把整条链走过几遍），
+   * 走全部产出加法轴的那一条门槛是结到第 12 层丹。
+   */
+  {
+    id: 'bonusDanYield',
+    name: '海纳百川',
+    desc: '每一炉的丹 +20%',
+    need: BONUS_QI_NEED,
+    metric: 'qi',
+    realm: '金丹',
+    bonus: { danAdd: 0.2 },
+  },
+  {
+    id: 'bonusQiReturn',
+    name: '聚沙成塔',
+    desc: '丹炼回灵气 +20%',
+    need: BONUS_TURNS_NEED,
+    metric: 'turns',
+    realm: '金丹',
+    bonus: { qiAdd: 0.2 },
+  },
+  {
+    id: 'bonusPointPass',
+    name: '踏破铁鞋',
+    desc: '每秒进的筑基点 1.50 倍',
+    need: BONUS_EXPLORE_NEED,
+    metric: 'explores',
+    realm: '金丹',
+    bonus: { passMul: 1.5 },
+  },
+  {
+    id: 'bonusEnergyAdd',
+    name: '丹成一品',
+    desc: '灵气产出 +50%',
+    need: BONUS_LAYER_NEED,
+    metric: 'layers',
+    realm: '金丹',
+    bonus: { energyAdd: 0.5 },
+  },
 ]
 
 /** 进度条上那笔账对玩家叫什么名字 */
@@ -547,6 +640,7 @@ export function metricLabel(metric: AchievementMetric | undefined): string {
   if (metric === 'insight') return '见识'
   if (metric === 'layers') return '次结丹'
   if (metric === 'turns') return '次凝练'
+  if (metric === 'explores') return '次探索'
   return '筑基点'
 }
 
@@ -623,9 +717,9 @@ export const JIEDAN_RETURN_PER = 1
 export const POINT_PASS_RATE = 0.01
 
 export const PILL_LINES: PillLineDef[] = [
-  { id: 'danLu', name: '丹炉', effect: '每一座炉子让出丹快一倍', kind: 'dan-mul', power: 2, growth: 30, ratio: 1 },
-  { id: 'huoHou', name: '火候', effect: '每级多炼出半成丹', kind: 'conv-add', power: 0.05, growth: 10, ratio: 3 },
-  { id: 'danFang', name: '丹房', effect: '每级把丹炼回灵气，修行快半成', kind: 'qi-add', power: 0.05, growth: 3, ratio: 9 },
+  { id: 'danLu', name: '丹炉', effect: '一炉催一炉。每级出丹翻一倍', kind: 'dan-mul', power: 2, growth: 30, ratio: 1 },
+  { id: 'huoHou', name: '火候', effect: '火头拿捏准。每级多炼出 5% 丹', kind: 'conv-add', power: 0.05, growth: 10, ratio: 3 },
+  { id: 'danFang', name: '丹房', effect: '丹气回哺自身。每级修行 +5%', kind: 'qi-add', power: 0.05, growth: 3, ratio: 9 },
 ]
 
 export function findPill(id: string): PillLineDef | undefined {
@@ -742,13 +836,13 @@ export interface SpiritDef {
 }
 
 export const SPIRITS: SpiritDef[] = [
-  { id: 'wuHuo', name: '武火', effect: '每一炉多炼出半成丹', kind: 'dan-add', power: 0.05, weight: 22 },
-  { id: 'shouYi', name: '守一', effect: '火候稳住，炸炉少两成', kind: 'bust-cut', power: 0.2, weight: 18 },
-  { id: 'huiGan', name: '回甘', effect: '炸了的炉子多赔一成半废渣', kind: 'dreg-add', power: 0.15, weight: 18 },
-  { id: 'tongLing', name: '通灵', effect: '丹炼回灵气，修行快半成', kind: 'qi-add', power: 0.05, weight: 14 },
-  { id: 'yangQi', name: '养气', effect: '浑身舒畅，灵气多出半成', kind: 'energy-add', power: 0.05, weight: 12 },
-  { id: 'minShou', name: '敏手', effect: '系统代买的手更快（只能参悟两层）', kind: 'auto-cut', power: 1.33, weight: 8, cap: 2 },
-  { id: 'dingXi', name: '定息', effect: '每秒自动进的筑基点更多（最多二十层）', kind: 'pass-add', power: 1.25, weight: 8, cap: 20 },
+  { id: 'wuHuo', name: '武火', effect: '再添一把火。每一炉多炼出 5% 丹', kind: 'dan-add', power: 0.05, weight: 22 },
+  { id: 'shouYi', name: '守一', effect: '心定炉不炸。每级炸炉率降 20%', kind: 'bust-cut', power: 0.2, weight: 18 },
+  { id: 'huiGan', name: '回甘', effect: '炸了也回甘。每级多赔 15% 废渣', kind: 'dreg-add', power: 0.15, weight: 18 },
+  { id: 'tongLing', name: '通灵', effect: '丹灵通经脉。每级修行 +5%', kind: 'qi-add', power: 0.05, weight: 14 },
+  { id: 'yangQi', name: '养气', effect: '气养周身畅。每级灵气 +5%', kind: 'energy-add', power: 0.05, weight: 12 },
+  { id: 'minShou', name: '敏手', effect: '手快如风。代买更快（只能参悟两层）', kind: 'auto-cut', power: 1.33, weight: 8, cap: 2 },
+  { id: 'dingXi', name: '定息', effect: '气沉息自定。每秒折的筑基点更多（最多二十层）', kind: 'pass-add', power: 1.25, weight: 8, cap: 20 },
 ]
 
 /** 抽一次要多少废渣：第 1 次 = 半秒的出丹流量，往后每次 ×1.15 */
@@ -777,4 +871,97 @@ export function spiritCurrent(def: SpiritDef, lv: number, style: NumberStyle = '
       return `×${BigNumber.fromLog10(lv * Math.log10(def.power)).format(2, style)}`
   }
 }
+
+/**
+ * 金丹的挑战 —— 五条"这条链真走过一遍"的凭据，达成就白给一条现成轴上的好处。
+ * 摆在丹炉页旁边那一栏，被动生效、没有领取那一步，也没有存档字段：
+ * 五条门槛读的全是**只涨不跌**的那几笔账（三条线的等级、累计抽数、七道精神的等级——
+ * 结丹和散功都不清它们），所以一旦达成就不会又锁回去。
+ *
+ * 好处一律借用链上现成的轴（见 `Bonus` 那段），不新起第六条算法轴。落点由 `sim/challenge-check.mjs` 量，
+ * 按定标档（灵气/秒 1e24，也就是"结丹线挂满 12 小时"那一档）一路往上挂，五档实测：
+ * 三道精神各 20 级要抽 124 次 ≈ 16 小时（正是一整晚那一格），丹房第 35 级约 2 天，火候第 18 级约 4 天，
+ * 炉子第 13 级约 10 天，抽满 150 次约 12 天——抽卡那条墙按 ×1.15/次 竖起来，是这五档里最硬的一条。
+ * 流量再往上（结层数、起丹房都抬流量）这四档一起缩短，谁也没被摆成"一辈子摸不到"。
+ */
+export type ChallengeNeed =
+  | { kind: 'pill'; line: string; level: number }
+  | { kind: 'pulls'; count: number }
+  | /** 任意 of 道精神各参悟到 each 级 */ { kind: 'spirits'; each: number; of: number }
+
+export interface ChallengeDef {
+  id: string
+  name: string
+  need: ChallengeNeed
+  /** 界面上念的那句达成条件 */
+  hint: string
+  /** 达成之后白给什么，玩家看得懂的那句 */
+  reward: string
+  bonus: Bonus
+}
+
+export const CHALLENGES: ChallengeDef[] = [
+  {
+    id: 'luHuoChunQing',
+    name: '炉火纯青',
+    need: { kind: 'pill', line: 'danLu', level: 13 },
+    hint: '丹炉炼到第 13 级',
+    reward: '每一炉的丹 +25%',
+    bonus: { danAdd: 0.25 },
+  },
+  {
+    id: 'huoHouDaoJia',
+    name: '火候到家',
+    need: { kind: 'pill', line: 'huoHou', level: 18 },
+    hint: '火候炼到第 18 级',
+    reward: '每秒进的筑基点 1.50 倍',
+    bonus: { passMul: 1.5 },
+  },
+  {
+    id: 'danFangGuangKai',
+    name: '丹房广开',
+    need: { kind: 'pill', line: 'danFang', level: 35 },
+    hint: '丹房炼到第 35 级',
+    reward: '丹炼回灵气 +25%',
+    bonus: { qiAdd: 0.25 },
+  },
+  {
+    id: 'baiZhuanChengZha',
+    name: '百转成渣',
+    need: { kind: 'pulls', count: 150 },
+    hint: '累计凝练转过 150 次',
+    reward: '炸炉赔的废渣 1.50 倍',
+    bonus: { dregMul: 1.5 },
+  },
+  {
+    id: 'wenWuJianXiu',
+    name: '文武兼修',
+    need: { kind: 'spirits', each: 20, of: 3 },
+    hint: '任意三道丹道精神各参悟到第 20 级',
+    reward: '灵气产出 +25%',
+    bonus: { energyAdd: 0.25 },
+  },
+]
+
+/**
+ * 结丹的里程碑 —— 层数本身已经给"全部灵气产出 ×(1+层数)"那笔大账（`JIEDAN_RETURN_PER`），
+ * 这一栏只在几个台阶上再补一笔现成轴上的好处，让每一层不止是"下一世短一截"。
+ * 台阶摆得开的理由是层数越往上越费灵气：每一层都要重新把手上的灵气攒回 1e30 那道线，
+ * 而下一世的长度严格除以 (1+层数)，所以第 8 层大约只是第 1 层的几分之一那么久。
+ */
+export interface MilestoneDef {
+  id: string
+  /** 已结成第几层丹才算这一档 */
+  layer: number
+  reward: string
+  bonus: Bonus
+}
+
+export const JINDAN_MILESTONES: MilestoneDef[] = [
+  { id: 'msLayer1', layer: 1, reward: '每一炉的丹 +10%', bonus: { danAdd: 0.1 } },
+  { id: 'msLayer2', layer: 2, reward: '炸炉赔的废渣 1.25 倍', bonus: { dregMul: 1.25 } },
+  { id: 'msLayer3', layer: 3, reward: '丹炼回灵气 +15%', bonus: { qiAdd: 0.15 } },
+  { id: 'msLayer5', layer: 5, reward: '灵气产出 +25%', bonus: { energyAdd: 0.25 } },
+  { id: 'msLayer8', layer: 8, reward: '每秒进的筑基点 1.50 倍', bonus: { passMul: 1.5 } },
+]
 

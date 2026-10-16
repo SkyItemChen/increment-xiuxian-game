@@ -21,10 +21,10 @@
   --line-soft: rgba(58, 112, 168, 0.1);
   --line-strong: rgba(42, 96, 152, 0.34);
 
-  /* 字 */
+  /* 字：三档都要在浅蓝底上过 WCAG AA（正文 4.5:1），小字标签才看得清 */
   --ink: #16395e;
-  --ink-dim: #4a6f95;
-  --ink-faint: #7f9cb8;
+  --ink-dim: #35597e;
+  --ink-faint: #4e7096;
   --ink-invert: #ffffff;
 
   /* 主强调色，原先的金色位：标题、境界标签、突破 */

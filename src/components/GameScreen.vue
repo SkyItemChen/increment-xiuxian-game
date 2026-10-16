@@ -6,6 +6,7 @@ import {
   breakBonus,
   breakThrough,
   fmt,
+  fmtNum,
   needBreakConfirm,
   offlineReport,
   pointPassActive,
@@ -18,6 +19,7 @@ import {
   type BreakPreview,
 } from '../game/state'
 import { pointsForLoop, POINTS_PER_DECADE } from '../game/rebirth'
+import { GAME_VERSION } from '../game/更新日志'
 import { POINT_PASS_RATE } from '../game/词条与属性'
 import BreakDialog from './BreakDialog.vue'
 import OfflineDialog from './OfflineDialog.vue'
@@ -25,7 +27,7 @@ import PillPanel from './PillPanel.vue'
 import RebirthPanel from './RebirthPanel.vue'
 import UpgradeList from './UpgradeList.vue'
 
-const emit = defineEmits<{ openSettings: [], openAutomation: [], openAchievements: [], openDev: [] }>()
+const emit = defineEmits<{ openSettings: [], openAutomation: [], openAchievements: [], openChangelog: [], openDev: [] }>()
 
 /** 测试页那颗只在 `npm run dev` 里露出来，发出去的版本上不认这条路 */
 const isDev = import.meta.env.DEV
@@ -33,7 +35,7 @@ const isDev = import.meta.env.DEV
 const spiritText = computed(() => fmt(shown.spirit))
 const gatherText = computed(() => fmt(state.spiritPerGather))
 const rateText = computed(() => fmt(state.spiritPerSecond))
-const gathersText = computed(() => state.totalGathers.toLocaleString('en-US'))
+const gathersText = computed(() => fmtNum(state.totalGathers))
 const periodText = computed(() => state.gatherSeconds.toFixed(1).replace(/\.0$/, ''))
 /** 吐纳速度词条生效时才占位，起手期那行还是干净的"每 5 秒一次" */
 const speedText = computed(() =>
@@ -63,7 +65,7 @@ const gateNeedText = computed(() => {
 const gateGainText = computed(() => {
   const need = gate.value?.realm.breakThrough
   if (!need) return '0'
-  return (pointsForLoop(shown.loopEarned, need, state.loops) + breakBonus()).toLocaleString('en-US')
+  return fmtNum(pointsForLoop(shown.loopEarned, need, state.loops) + breakBonus())
 })
 
 // 差好几个数量级，线性进度条永远贴着 0，改用 log 刻度
@@ -115,7 +117,10 @@ const playTime = computed(() => {
     <div class="aurora"></div>
 
     <header class="topbar">
-      <span class="brand">问道长生</span>
+      <div class="brand-block">
+        <span class="brand">问道长生</span>
+        <span class="version">v{{ GAME_VERSION }}</span>
+      </div>
       <div class="topbar-right">
         <span class="time">修行时长 {{ playTime }}</span>
         <button v-if="isDev" class="gear dev" type="button" aria-label="测试" @click="emit('openDev')">
@@ -139,6 +144,10 @@ const playTime = computed(() => {
         <button class="gear" type="button" aria-label="成就" @click="emit('openAchievements')">
           <span class="gear-icon">❖</span>
           <span class="gear-text">成就</span>
+        </button>
+        <button class="gear" type="button" aria-label="更新日志" @click="emit('openChangelog')">
+          <span class="gear-icon">☰</span>
+          <span class="gear-text">日志</span>
         </button>
       </div>
     </header>
@@ -289,6 +298,24 @@ const playTime = computed(() => {
   letter-spacing: 8px;
   color: var(--accent);
   font-family: var(--font-kai);
+}
+
+/* 品牌后面缀一颗当前版本，跟更新日志页头那颗同一种做法 */
+.brand-block {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+}
+
+.version {
+  padding: 2px 8px;
+  border: 1px solid var(--accent-line);
+  border-radius: 7px;
+  background: var(--accent-wash);
+  color: var(--accent-deep);
+  font-size: 11px;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
 }
 
 .topbar-right {

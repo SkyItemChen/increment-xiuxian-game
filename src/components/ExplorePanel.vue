@@ -6,6 +6,7 @@ import {
   explore,
   exploreOdds,
   exploreRows,
+  fmtNum,
   needExploreConfirm,
   previewExplore,
   state,
@@ -29,7 +30,7 @@ const dig = computed(() => exploreOdds())
 const canDig = computed(() => state.points >= 1)
 const digSub = computed(() =>
   canDig.value
-    ? `押上 ${dig.value.stake} 点 · 挖 ${dig.value.count} 件 · 换 ${dig.value.stakeInsight} 见识`
+    ? `押上 ${fmtNum(dig.value.stake)} 点 · 挖 ${dig.value.count} 件 · 换 ${fmtNum(dig.value.stakeInsight)} 见识`
     : '手上还没有筑基点，先去练气攒一世',
 )
 const digOddsText = computed(() =>
@@ -53,7 +54,7 @@ function onConfirmDig(): void {
   explore()
 }
 
-const insightText = computed(() => state.insight.toLocaleString('en-US'))
+const insightText = computed(() => fmtNum(state.insight))
 const rows = computed<ExploreQuote[]>(() => exploreRows())
 /** 一级都买不起时按钮关着；能买就交给 buyAllExplore 去摊平四条 */
 const canBuyAll = computed(() => rows.value.some((r) => r.maxLevels >= 1))
@@ -124,7 +125,7 @@ function levelOf(id: string): number {
               :class="{ ready: state.insight >= row.cost }"
               :disabled="state.insight < row.cost"
               @click="buyExplore(row.def.id, 1)"
-            >{{ row.cost }} 识</button>
+            >{{ fmtNum(row.cost) }} 识</button>
             <button
               class="buy"
               type="button"
