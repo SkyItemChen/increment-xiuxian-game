@@ -164,11 +164,11 @@ console.log(
   `  里程碑加点：${JINDAN_MILESTONES.map((m) => `第 ${m.layer} 层 +${m.marks ?? 0}`).join(' · ')}` +
     ` · 结到第 8 层共 ${8 + JINDAN_MILESTONES.reduce((a, m) => a + (m.marks ?? 0), 0)} 点`,
 )
-console.log(`  当前时间锚：首丹 ${dur(T0)}（丹炉段 ${dur(FURNACE_PHASE)}）· 405 层约 11.03 小时`)
+const baseRun = simulate('none', 405)
+console.log(`  当前时间锚：首丹 ${dur(T0)}（丹炉段 ${dur(FURNACE_PHASE)}）· 405 层约 ${(baseRun.t / 3600).toFixed(2)} 小时`)
 console.log(`  支点：不加丹纹的一世摸到 1e100 要 1e${Math.log10(base100.t / (365.25 * 86400)).toFixed(0)} 年`)
 
 console.log('\n【点数从哪来】405 层给 405 + 17 = 422 点，1000 层给 1017 点')
-const baseRun = simulate('none', 405)
 for (const m of baseRun.marks.filter((x) => x.layer <= 405)) {
   const earned = m.layer + JINDAN_MILESTONES.filter((ms) => ms.layer <= m.layer).reduce((a, ms) => a + (ms.marks ?? 0), 0)
   console.log(
@@ -221,7 +221,7 @@ for (const r of runs405) {
   )
 }
 
-console.log('\n【返元每级给多少才不碰 11 小时】返元优先、405 层、只改每级加成')
+console.log(`\n【返元每级给多少才不碰 ${(baseRun.t / 3600).toFixed(1)} 小时】返元优先、405 层、只改每级加成`)
 for (const p of [0.01, 0.02, 0.03, 0.04, 0.05]) {
   // 临时把返元 power 换掉再跑一遍
   const def = JINDAN_TREE.find((b) => b.id === 'fanYuan')
@@ -257,8 +257,8 @@ console.log(
 )
 
 console.log('\n【结论】')
-console.log('  1. 点数几乎全在后段才到：第 20 层已经是 10 小时上下，422 点里约 390 点落在最后半小时。')
-console.log('  2. 里程碑前段那 17 点让第 8 层就能点出第一枝十来级，前期不至于“有系统没点可点”；')
-console.log('     但生产枝（丹道/返元）对 405 层总时长的影响仍很小，11 小时这条锚基本不动。')
-console.log('  3. 识海优先把 405 层的结丹见识抬到一千上下，仍只是鉴宝台满额的千分之几，不会一次买穿。')
+console.log('  1. 点数几乎全在后段才到：第 20 层已经是 4.5 小时上下，422 点里约 385 点落在最后一刻钟。')
+console.log('  2. 里程碑前段那 17 点让第 8 层就能把一枝点到 6 级，前期不至于“有系统没点可点”；')
+console.log('     但生产枝（丹道/返元）对 405 层总时长的影响仍很小，4.8 小时这条锚基本不动。')
+console.log('  3. 识海优先把 405 层的结丹见识抬到一千六百多，仍只是鉴宝台满额的千分之几，不会一次买穿。')
 console.log('  4. 四枝全满要 1012 点，正好落在 1000 层附近：405 层是“一主一副”，1000 层才谈“全满”。')

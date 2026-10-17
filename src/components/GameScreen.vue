@@ -35,7 +35,6 @@ const isDev = import.meta.env.DEV
 const spiritText = computed(() => fmt(shown.spirit))
 const gatherText = computed(() => fmt(state.spiritPerGather))
 const rateText = computed(() => fmt(state.spiritPerSecond))
-const gathersText = computed(() => fmtNum(state.totalGathers))
 const periodText = computed(() => state.gatherSeconds.toFixed(1).replace(/\.0$/, ''))
 /** 吐纳速度词条生效时才占位，起手期那行还是干净的"每 5 秒一次" */
 const speedText = computed(() =>
@@ -181,7 +180,7 @@ const playTime = computed(() => {
           <div class="gather">
             <div class="gather-head">
               <span class="gather-label">吐 纳</span>
-              <span class="gather-sub">每 {{ periodText }} 秒一次{{ speedText }} · 已吐纳 {{ gathersText }} 次</span>
+              <span class="gather-sub">每 {{ periodText }} 秒一次{{ speedText }}</span>
             </div>
             <div class="gather-bar" role="progressbar" :aria-valuenow="Math.round(state.gatherProgress * 100)">
               <i :style="{ width: gatherWidth }"></i>

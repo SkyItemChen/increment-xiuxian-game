@@ -171,7 +171,7 @@ const identityOk = identityCases.every((v) => applyMetaMult(v, 0) === v)
 console.log(`  applyMetaMult 恒等：${identityCases.map((v) => v.toExponential(0)).join(' / ')} → ${identityOk ? '✓' : '✗'}`)
 console.log(`  元道 0 级 M = ${metaMultOf(0)} ✓ · 神悟台八条线 0 级都不产出加成`)
 const bare = runLife({ mods: bareMods(), target: 1e10 })
-console.log(`  空树空宝 练气 1e10：${(bare.t / 60).toFixed(2)} 分（基准 20.2 分）${Math.abs(bare.t / 60 - 20.2) < 0.2 ? ' ✓' : ' ✗'}`)
+console.log(`  空树空宝 练气 1e10：${(bare.t / 60).toFixed(2)} 分（基准 15.0 分）${Math.abs(bare.t / 60 - 15.0) < 0.2 ? ' ✓' : ' ✗'}`)
 console.log('  丹炉 Lv.12 @1e24 = 12h、t·√流量 = 4.32e16 s 由 sim/jindan-anchor.mjs 复核；')
 console.log('  本脚本只证明 M=1 是结构默认值，旧 sim 不点元道时拿到的就是这两个数。')
 
@@ -182,6 +182,6 @@ console.log(`  1. 固定 M：平方根版 50 轮时长与 M 无关（相对差 $
 console.log(`  2. 固定 M：线性版按 1/√M 缩短，M=1e6 时单轮 2.0 分、M=1e12 时单轮 ${dur(fixedRows.at(-1).li.marks[0].t)}——会塌到分钟/秒级 ✗`)
 console.log('  3. 内生 M：50 轮最激进的元道也只有 ×' + metaMultOf(endogenousChain('sqrt', true).state.shenWu.yuanDao).toFixed(2) +
   '，平方根版单轮不缩；线性版同 M 下时长缩到 ' + (1 / Math.sqrt(metaMultOf(endogenousChain('linear', true).state.shenWu.yuanDao))).toFixed(2) + ' 倍')
-console.log('  4. M=1 恒等，练气 20.2 分不动 ✓')
+console.log('  4. M=1 恒等，练气 15.0 分不动 ✓')
 console.log('  结论：采用平方根产量 √(锚 × 1e40) × 1e-10，metaMult 只放大旧链产出，不参与元婴突破时长的反馈；')
 console.log('        若坚持线性产量，pillAnchor 必须取"乘 metaMult 之前的裸灵气/秒"，否则后期突破会塌到分钟/秒级。')

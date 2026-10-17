@@ -24,7 +24,7 @@ function withHigh(highAt, highGrowth) {
 const TARGET_LOG = Number(process.argv[2] ?? 36)
 const targets = [10, 20, 30, TARGET_LOG]
 
-console.log(`空树空宝、一世挂到 1e${TARGET_LOG}；第一段照旧（20.2 分摸到 1e10）\n`)
+console.log(`空树空宝、一世挂到 1e${TARGET_LOG}；第一段照旧（15.0 分摸到 1e10）\n`)
 console.log('高段起点  高段涨幅  ' + targets.map((d) => `1e${d}`.padStart(10)).join('') + '   末尾法门(凝气/聚灵/周天)')
 
 const baseline = runLife({ mods: bareMods(), target: 10 ** TARGET_LOG, items: withHigh(null, 0) })

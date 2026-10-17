@@ -5,7 +5,7 @@
  * 其中 mantissa ∈ [1, 10)，exponent 为 double（上限约 1e308）。
  *
  * 显示记法（中文修仙语境）由调用方选：
- *   - 字母计数法 letter      ：K M B T Qa Qi Sx Sp Oc No Dc，超过 1e36 转下面的写法
+ *   - 字母计数法 letter      ：每 3 个数量级进一位；K…No 之后接 aa、ab…zz，再往上退回科学计数
  *   - 科学计数法 scientific  ：1e7 之前保持普通数字，之后写成 1.23e7
  *   - 两者共用的大数尾巴：
  *       < 1e1000  ：科学计数 1.23e456
@@ -20,7 +20,12 @@ export type NumberStyle = 'letter' | 'scientific'
 /** 科学计数法的切换阈值：1e7 以下玩家更想看清具体数字 */
 const SCIENTIFIC_FROM = 7
 
-const LETTERS = ['K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No', 'Dc']
+/** 单字母段：K 对应 1e3 … No 对应 1e30 */
+const LETTERS = ['K', 'M', 'B', 'T', 'Qa', 'Qi', 'Sx', 'Sp', 'Oc', 'No']
+/** 双字母段从第 11 级（1e33）起，aa → zz 一共 676 级 */
+const LETTER_DOUBLE_FROM = LETTERS.length + 1
+const LETTER_DOUBLE_COUNT = 26 * 26
+const LETTER_MAX_TIER = LETTER_DOUBLE_FROM + LETTER_DOUBLE_COUNT - 1
 const TIER_LETTERS = 'EFGHIJKLMNOPQRSTUVWXYZ'
 
 export class BigNumber {
@@ -157,10 +162,14 @@ export class BigNumber {
    * @param style    显示记法，默认字母计数法
    */
   format(decimals = 2, style: NumberStyle = 'letter'): string {
+    // 字母记法整条交给 formatLetter；传 log10 是为了 1e308 以上的数不先溢出成 Infinity
+    if (style === 'letter') {
+      return this.isZero ? formatLetter(0, false, decimals) : formatLetter(this.log10(), true, decimals)
+    }
     if (this.isZero) return '0'
     if (this.e < 0) return this.toNumber().toFixed(decimals)
-    // 字母记法从 1e3 起就有缩写，科学记法要到 1e7，在那之前保持能一眼读出的普通写法
-    if (this.e < (style === 'scientific' ? SCIENTIFIC_FROM : 3)) {
+    // 1e7 以下保持能一眼读出的普通写法
+    if (this.e < SCIENTIFIC_FROM) {
       const v = this.toNumber()
       // 整数部分不截断，小数最多 decimals 位
       return v.toLocaleString('en-US', {
@@ -168,29 +177,90 @@ export class BigNumber {
         maximumFractionDigits: v < 100 ? decimals : 0,
       })
     }
-    // 传统字母缩写：每 3 位一级（K 覆盖 1e3 起，Dc 覆盖至 1e35）
-    if (style === 'letter' && this.e < 36) {
-      const tier = Math.floor(this.e / 3) - 1
-      const letter = LETTERS[tier]
-      if (letter) {
-        const mantissa = this.m * Math.pow(10, this.e - (tier + 1) * 3)
-        return `${trim(mantissa, decimals)}${letter}`
-      }
-    }
-    // 指数自身 ≥ 1e6 时，用 F/G/H… 级联记法
-    if (this.e >= 1e6) {
-      const tierIdx = Math.floor(Math.log10(this.e) / 6) // 0 → F
-      const tierExp = Math.pow(10, tierIdx * 6)
-      const head = TIER_LETTERS[Math.min(tierIdx, TIER_LETTERS.length - 1)]
-      const expRemain = this.e / tierExp // 落在 [1, 1e6) 内
-      return `${trim(this.m, decimals)}${head}${trim(expRemain, decimals)}`
-    }
-    // 1e33 ~ 1e1000：普通科学计数；指数 ≥ 1000 后进入 E 记法
-    if (this.e < 1000) {
-      return `${trim(this.m, decimals)}e${this.e}`
-    }
-    return `${trim(this.m, decimals)}E${formatExponent(this.e)}`
+    return scientificTail(this.m, this.e, decimals)
   }
+}
+
+/**
+ * 每 3 个数量级进一档的后缀：1 档 K（1e3）… 10 档 No（1e30），
+ * 11 档起改用两位小写字母 aa（1e33）… zz（1e2058），再往上没有后缀。
+ */
+function letterSuffix(tier: number): string | null {
+  if (tier >= 1 && tier <= LETTERS.length) return LETTERS[tier - 1]
+  if (tier >= LETTER_DOUBLE_FROM && tier <= LETTER_MAX_TIER) {
+    const i = tier - LETTER_DOUBLE_FROM
+    return String.fromCharCode(97 + Math.floor(i / 26), 97 + (i % 26))
+  }
+  return null
+}
+
+/**
+ * 字母计数法的唯一出口。纯函数，不读状态。
+ * @param value   原始数值，或 log10 值
+ * @param isLog10 传入的是否为 log10 值（大数用这个避免溢出）
+ * @param decimals 保留小数位，默认 2
+ */
+export function formatLetter(value: number, isLog10 = false, decimals = 2): string {
+  let log: number
+  if (isLog10) {
+    log = value
+  } else if (value === 0) {
+    return (0).toFixed(decimals)
+  } else if (value < 0) {
+    return `-${formatLetter(-value, false, decimals)}`
+  } else {
+    log = Math.log10(value)
+  }
+
+  if (!Number.isFinite(log)) {
+    if (log > 0) return '∞'
+    return (0).toFixed(decimals)
+  }
+
+  // 不到 1e3 就直接写出来，整数部分不进字母档
+  if (log < 3) {
+    const text = Math.pow(10, log).toFixed(decimals)
+    // 999.999… 四舍五入成 1000.00 时挪进 K 档，保证整数部分落在 1~999
+    return Number(text) >= 1000 ? `${(1).toFixed(decimals)}K` : text
+  }
+
+  const tier = Math.floor(log / 3)
+  const suffix = tier <= LETTER_MAX_TIER ? letterSuffix(tier) : null
+  if (!suffix) {
+    const e = Math.floor(log)
+    return scientificTail(Math.pow(10, log - e), e, decimals)
+  }
+
+  // 尾数按 log10 回算，能落在 1~999 之间，也不会因为原始数值太大而溢出
+  let mantissa = Math.pow(10, log - tier * 3)
+  let text = mantissa.toFixed(decimals)
+  if (Number(text) >= 1000) {
+    // 四舍五入把 999.99 顶成 1000.00，整档进一位
+    mantissa /= 1000
+    text = mantissa.toFixed(decimals)
+    const next = letterSuffix(tier + 1)
+    if (!next) {
+      const e = Math.floor(log)
+      return scientificTail(Math.pow(10, log - e), e, decimals)
+    }
+    return `${text}${next}`
+  }
+  return `${text}${suffix}`
+}
+
+/** 字母段到顶之后（以及科学记法本身）共用的大数尾巴 */
+function scientificTail(mantissa: number, exponent: number, decimals: number): string {
+  // 指数自身 ≥ 1e6 时，用 F/G/H… 级联记法
+  if (exponent >= 1e6) {
+    const tierIdx = Math.floor(Math.log10(exponent) / 6) // 0 → F
+    const tierExp = Math.pow(10, tierIdx * 6)
+    const head = TIER_LETTERS[Math.min(tierIdx, TIER_LETTERS.length - 1)]
+    const expRemain = exponent / tierExp // 落在 [1, 1e6) 内
+    return `${trim(mantissa, decimals)}${head}${trim(expRemain, decimals)}`
+  }
+  // 1e1000 之前用普通科学计数，之后进入 E 记法
+  if (exponent < 1000) return `${trim(mantissa, decimals)}e${exponent}`
+  return `${trim(mantissa, decimals)}E${formatExponent(exponent)}`
 }
 
 /** 去除小数末尾多余的零 */

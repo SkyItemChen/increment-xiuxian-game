@@ -130,7 +130,7 @@ function onWipe(): void {
           <div class="row col">
             <div class="row-text">
               <p class="name">数字记法</p>
-              <p class="desc">字母计数法用 K/M/B/T 缩写；科学计数法在数值达到 1e7 后写成 1.23e7</p>
+              <p class="desc">字母计数法每千倍进一位，K/M/B/T 之后接 aa、ab…；科学计数法在数值达到 1e7 后写成 1.23e7</p>
             </div>
             <div class="seg two">
               <button

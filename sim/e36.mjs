@@ -78,7 +78,7 @@ function scenarioB(holdDecades, { withTreasures = false, cuiLianLv = CUI_LIAN, l
 
 const which = (process.argv[2] || 'all').toLowerCase()
 if (which === 'cal' || which === 'all' || which === 'd') {
-  console.log('校准：一世摸到 1e10 要多久（基准 20.2 分）')
+  console.log('校准：一世摸到 1e10 要多久（基准 15.0 分）')
   for (const free of which === 'd' ? [false, true] : [false]) {
     for (const p of ['cheap', 'end']) {
       const r = runLife({ mods: bareMods(), target: GATE, policy: p, free })

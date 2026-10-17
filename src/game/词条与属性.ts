@@ -15,7 +15,7 @@ import type { NumberStyle } from './BigNumber'
  *          结丹散去的还是修行那一层（2026-10-16 接的运行时，算式在 `金丹丹炉.ts` 与 `凝练.ts`，定标在 `sim/jindan-anchor.mjs`）；
  *   元婴及以后 = 界面还没做，只按"每一境都得新开一条链"排着阈值（见下）。
  *
- * 转生线（修行境攒够灵气就能破境，可以反复）：筑基 1e10 —— 空树一世 20.2 分钟。
+ * 转生线（修行境攒够灵气就能破境，可以反复）：筑基 1e10 —— 空树一世 15.0 分钟。
  *   金丹一开张这条线就改成按秒折算：破境那颗按钮不再摆，破境本该给的点数每秒给玩家一成（文末 POINT_PASS_RATE）。
  * 筑基点按"这一世比门槛多攒出几个数量级"线性结算：一个数量级 **3 点**，摸到门槛就破给 2 点，
  * 每破一次境再折算 0.25 个数量级（8 世封顶），所以一世比一世厚（公式在 `rebirth.ts`）。
@@ -100,33 +100,33 @@ export interface UpgradeDef {
  * 2026-10-16 加了 `segments`：同一条法门的 g 允许按等级区间换档，墙从"一堵"变成"几段"。
  * 三条乘法类的中段松一档（g 换成 4 / 6 / 5，E 抬到 .124 / .386 / .270，合计 .78），高段把 g 换回
  * 原值，拐点统一摆在 30 级。低段拐点 10/10/12 与高段拐点 30 都落在"一世摸到 1e10 时才 7/6/8 级"
- * 之外，所以空树一世 20 分钟这个锚点没被分段碰到（实测 20.2 分）。
+ * 之外，所以空树一世 15 分钟这个锚点没被分段碰到（实测 15.0 分）。
  * 两条加法类（吐纳引气、紫府开辟）不加段：它们的 E 本来就是 0，墙不在它们身上。
  *
  * 实测（空树空宝、一世挂到底，`node --import ./sim/ts-hook.mjs sim/e36.mjs a`）：
- * 1e10 · 20 分 / 1e20 · 198 天 / 1e26 · 21 年 / 1e30 · 268 年 / 1e33 · 8408 年 / 1e36 · 30 万年。
+ * 1e10 · 15 分 / 1e20 · 118 天 / 1e26 · 10.5 年 / 1e30 · 119 年 / 1e33 · 3455 年 / 1e36 · 11.58 万年。
  * 对比一路不分段：1e20 要 10.4 年、1e36 要 100 亿年。**分段买到的不是把墙拆掉，是把悬崖改成斜坡**——
  * 中量级便宜了一个数量级还多，30 级以后每个数量级的等待重新按 2~3 倍递增。
  * 高段拐点必须落在玩家真会走到的等级里：早先摆在 50/60 级，一世最多到 47/38/40 级，那段完全咬不到，
  * 结果只剩中段的软化，1e36 从 200 亿年塌到 5.85 万年。扫参见 `sim/segment-scan.mjs`。
  *
- * 定下的节奏（贪心买入模拟）：空树一世 20 分钟摸到 1e10，全程约 82 次参悟。
+ * 定下的节奏（贪心买入模拟）：空树一世 15 分钟摸到 1e10，全程约 81 次参悟。
  */
 export const LIANQI_UPGRADES: UpgradeDef[] = [
-  { id: 'lianqi_tuNa', name: '吐纳引气', kind: 'auto-base', base: 10, growth: 1.55, power: 10 },
+  { id: 'lianqi_tuNa', name: '吐纳引气', kind: 'auto-base', base: 10, growth: 1.55, power: 12 },
   {
-    id: 'lianqi_ningQi', name: '凝气成珠', effect: '每级吐纳速度 +9%，进度条走得更快', kind: 'speed-mult',
-    base: 150, growth: 12, power: 1.09, segments: [{ at: 12, growth: 4 }, { at: 30, growth: 12 }],
+    id: 'lianqi_ningQi', name: '凝气成珠', effect: '每级吐纳速度 +10%，进度条走得更快', kind: 'speed-mult',
+    base: 150, growth: 12, power: 1.1, segments: [{ at: 12, growth: 4 }, { at: 30, growth: 12 }],
   },
   {
     id: 'lianqi_juLing', name: '聚灵阵眼', effect: '每级让吐纳引气、紫府开辟的效果翻倍', kind: 'auto-power',
-    base: 60, growth: 20, power: 2.02, segments: [{ at: 10, growth: 6 }, { at: 30, growth: 20 }],
+    base: 60, growth: 20, power: 2.03, segments: [{ at: 10, growth: 6 }, { at: 30, growth: 20 }],
   },
   {
-    id: 'lianqi_zhouTian', name: '周天运转', effect: '每级灵气/秒 +52%', kind: 'auto-mult',
-    base: 3e3, growth: 15, power: 1.52, segments: [{ at: 10, growth: 5 }, { at: 30, growth: 15 }],
+    id: 'lianqi_zhouTian', name: '周天运转', effect: '每级灵气/秒 +53%', kind: 'auto-mult',
+    base: 3e3, growth: 15, power: 1.53, segments: [{ at: 10, growth: 5 }, { at: 30, growth: 15 }],
   },
-  { id: 'lianqi_ziFu', name: '紫府开辟', kind: 'auto-base', base: 2e4, growth: 3, power: 2500 },
+  { id: 'lianqi_ziFu', name: '紫府开辟', kind: 'auto-base', base: 2e4, growth: 3, power: 3000 },
 ]
 
 /**
@@ -194,8 +194,8 @@ export function upgradeCurrent(
  *  - crit-add    每级给 power 的机会让一次吐纳收益 ×GATHER_CRIT_MULT，和紫金葫芦共用一个概率池
  *  - point-add   每次破境多给 power×等级 个筑基点，和混沌钟同一笔账
  *
- * 五条在一世时长上都量过（空树一世 20.2 分）：灵根 Lv.1 → 13.5 分、道基 Lv.1 → 16.9 分、
- * 慧根 Lv.1 → 18.3 分、悟性 Lv.1 → 19.1 分，第一条点下去就有明显反馈。
+ * 五条在一世时长上都量过（空树一世 15.0 分）：灵根 Lv.1 → 10.1 分、道基 Lv.1 → 12.5 分、
+ * 慧根 Lv.1 → 12.1 分、悟性 Lv.1 → 12.7 分，第一条点下去就有明显反馈。
  */
 export type RebirthKind = 'global-add' | 'output-add' | 'cost-cut' | 'crit-add' | 'point-add'
 

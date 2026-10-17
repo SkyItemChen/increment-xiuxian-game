@@ -10,11 +10,12 @@ const row = (label, r) => {
   )
 }
 
-console.log('— 空树一世（五条法门各自抬过一档）：攒到 1e10 —')
-row('第一世 / 空树来世', runLife({}))
+console.log('— 空树一世（五条法门加强后）：攒到 1e10 —')
+const base = runLife({})
+row('第一世 / 空树来世', base)
 
 console.log('\n空树一世 = 攒到 1e10 灵气。先天根基固定 1 灵气/秒，之后快慢全看根骨树买了几级。\n')
-console.log('— 单条对照（空树一世 20.2 分）—')
+console.log(`— 单条对照（空树一世 ${mins(base.t)} 分）—`)
 for (const lv of [1, 2, 3, 5, 10, 25]) {
   row(`道基 Lv.${lv}（+20% 全部产出/级）`, runLife({ globalAdd: 0.2 * lv }))
   row(`灵根 Lv.${lv}（+50% 法门/级）`, runLife({ outputAdd: 0.5 * lv }))

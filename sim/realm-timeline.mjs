@@ -76,7 +76,7 @@ console.log('【阶段一 · 练气与探索】')
 const anchor = runLife({ mods: bareMods(), target: GATE })
 const pts100 = toPoints(100)
 const pts20 = toPoints(20)
-console.log(`  空树空宝 一世摸到 1e10：${dur(anchor.t)}（${(anchor.t / 60).toFixed(2)} 分，锚点 20.2 分）`)
+console.log(`  空树空宝 一世摸到 1e10：${dur(anchor.t)}（${(anchor.t / 60).toFixed(2)} 分，锚点 15.0 分）`)
 console.log(`  累计 ${pts100.earned} 筑基点（探索开启）：${dur(pts100.t)} · ${pts100.loops} 世`)
 console.log(`  累计 ${pts20.earned} 筑基点（练气代买）：${dur(pts20.t)} · ${pts20.loops} 世`)
 

@@ -92,7 +92,7 @@ console.log('  约 405 层攒出 1e39 倍后，最后一世就能把累计灵气
 
 console.log('\n【旧锚复核】metaMult 不接进运行时，旧脚本读数不动')
 const bare = runLife({ mods: bareMods(), target: 1e10 })
-console.log(`  空树空宝 练气 1e10：${dur(bare.t)}（基准 20.2 分，${(bare.t / 60).toFixed(2)} 分）`)
+console.log(`  空树空宝 练气 1e10：${dur(bare.t)}（基准 15.0 分，${(bare.t / 60).toFixed(2)} 分）`)
 const flow30 = yuanRateLog10(30, YUAN_MODES[0], 0, 'sqrt')
 console.log(
   `  定标锚检查：平方根产量 1e${flow30.toFixed(3)}/秒（设计稿要求 1e25）·` +

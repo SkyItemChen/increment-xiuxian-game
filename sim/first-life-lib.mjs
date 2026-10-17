@@ -1,10 +1,10 @@
 // 一世模拟的公共部分：纯 double + log 空间，绝不 import BigNumber（sub 钳负数、add 丢小项会静默算错）。
 export const ITEMS = [
-  { id: 'tuNa', kind: 'auto-base', base: 10, growth: 1.55, power: 10 },
-  { id: 'ningQi', kind: 'speed-mult', base: 150, growth: 12, power: 1.09 },
-  { id: 'juLing', kind: 'auto-power', base: 60, growth: 20, power: 2.02 },
-  { id: 'zhouTian', kind: 'auto-mult', base: 3e3, growth: 15, power: 1.52 },
-  { id: 'ziFu', kind: 'auto-base', base: 2e4, growth: 3, power: 2500 },
+  { id: 'tuNa', kind: 'auto-base', base: 10, growth: 1.55, power: 12 },
+  { id: 'ningQi', kind: 'speed-mult', base: 150, growth: 12, power: 1.1 },
+  { id: 'juLing', kind: 'auto-power', base: 60, growth: 20, power: 2.03 },
+  { id: 'zhouTian', kind: 'auto-mult', base: 3e3, growth: 15, power: 1.53 },
+  { id: 'ziFu', kind: 'auto-base', base: 2e4, growth: 3, power: 3000 },
 ]
 export const GATE = 1e10
 export const PERIOD = 5

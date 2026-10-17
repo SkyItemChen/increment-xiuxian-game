@@ -3,7 +3,7 @@
  * 版本号只有这一处，页头和修行页角上都读它——改一次玩法就往上挪一格。
  * 每条一句话说完，只写玩家能感觉到的变化，不写实现层的东西。
  */
-export const GAME_VERSION = '0.12'
+export const GAME_VERSION = '0.13'
 
 export interface ChangelogEntry {
   version: string
@@ -13,6 +13,15 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.13',
+    date: '2026-10-17',
+    items: [
+      '练气：五门法门再次增强，第一世约十五分钟就能破境',
+      '修行页：去掉“已吐纳多少次”的累计显示',
+      '数字显示：字母计数法在 K/M/B/T 之后接两位字母，aa、ab…一路排到 zz',
+    ],
+  },
   {
     version: '0.12',
     date: '2026-10-17',
