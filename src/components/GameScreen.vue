@@ -120,6 +120,10 @@ const playTime = computed(() => {
       <div class="brand-block">
         <span class="brand">问道长生</span>
         <span class="version">v{{ GAME_VERSION }}</span>
+        <button class="changelog-btn" type="button" aria-label="更新日志" @click="emit('openChangelog')">
+          <span class="changelog-icon">☰</span>
+          <span class="changelog-text">日志</span>
+        </button>
       </div>
       <div class="topbar-right">
         <span class="time">修行时长 {{ playTime }}</span>
@@ -144,10 +148,6 @@ const playTime = computed(() => {
         <button class="gear" type="button" aria-label="成就" @click="emit('openAchievements')">
           <span class="gear-icon">❖</span>
           <span class="gear-text">成就</span>
-        </button>
-        <button class="gear" type="button" aria-label="更新日志" @click="emit('openChangelog')">
-          <span class="gear-icon">☰</span>
-          <span class="gear-text">日志</span>
         </button>
       </div>
     </header>
@@ -316,6 +316,35 @@ const playTime = computed(() => {
   font-size: 11px;
   letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
+}
+
+/* 版本号右侧的日志按钮：和 version 同一种小标签风格，但可点 */
+.changelog-btn {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  border: 1px solid var(--accent-line);
+  border-radius: 7px;
+  background: var(--surface-flat);
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: 1px;
+  transition: filter 0.15s ease, transform 0.06s ease;
+}
+
+.changelog-btn:hover {
+  filter: brightness(1.08);
+}
+
+.changelog-btn:active {
+  transform: translateY(2px);
+}
+
+.changelog-icon {
+  font-size: 12px;
+  line-height: 1;
 }
 
 .topbar-right {
