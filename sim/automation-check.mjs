@@ -1,6 +1,6 @@
 import { REALMS, CULTIVATE_INDEX } from '../src/game/realms.ts'
 import { BigNumber } from '../src/game/BigNumber.ts'
-import { achievementRows, autoBuyActive, autoBuyGate, autoBuyPillActive, autoPull, autoPullActive, buyAllFromEnd, exportSave, importSave, pullQuote, state } from '../src/game/state.ts'
+import { achievementRows, autoBuyActive, autoBuyExploreGate, autoBuyExploreTreeActive, autoBuyGate, autoBuyPillActive, autoBuyRebirthActive, autoBuyRebirthGate, autoPull, autoPullActive, buyAllFromEnd, exportSave, importSave, pullQuote, state } from '../src/game/state.ts'
 
 const ids = REALMS[CULTIVATE_INDEX].upgrades.map((def) => def.id)
 
@@ -108,3 +108,14 @@ state.jindan = 0
 state.totalEarned = BigNumber.from(1e29)
 state.dreg = new BigNumber(5, 25)
 console.log('散功之后（结丹 0 层）：在跑 =', autoPullActive(), '· 代抽 =', autoPull(), '· 抽过', state.pulls, '次')
+
+// 9. 根骨与鉴宝台的代买各看各的等级账：谁先满谁先放手，另一条还锁着
+state.settings.autoBuyRebirth = true
+state.settings.autoBuyExplore = true
+state.rebirth = {}
+state.exploreLevels = {}
+console.log('两棵树都空：根骨', autoBuyRebirthActive(), JSON.stringify(autoBuyRebirthGate()), '· 鉴宝', autoBuyExploreTreeActive(), JSON.stringify(autoBuyExploreGate()))
+state.rebirth = { daoJi: 40 }
+console.log('根骨合计 40：根骨', autoBuyRebirthActive(), '· 鉴宝', autoBuyExploreTreeActive())
+state.exploreLevels = { yanLi: 14, tieChan: 10 }
+console.log('鉴宝合计 24：根骨', autoBuyRebirthActive(), '· 鉴宝', autoBuyExploreTreeActive())

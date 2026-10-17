@@ -15,6 +15,8 @@
   --surface: rgba(255, 255, 255, 0.66);
   --surface-flat: rgba(255, 255, 255, 0.46);
   --surface-raised: rgba(255, 255, 255, 0.82);
+  /* 半透明浮层：压在灵气读数上也看得见底下的字 */
+  --surface-frosted: rgba(255, 255, 255, 0.44);
   --tint: rgba(90, 150, 210, 0.1);
   --tint-hover: rgba(90, 150, 210, 0.18);
   --line: rgba(58, 112, 168, 0.18);
@@ -56,6 +58,12 @@
   --gain: #0b78a8;
   --gain-wash: rgba(20, 130, 190, 0.07);
   --gain-line: rgba(20, 130, 190, 0.26);
+
+  /* 已达成的成就：整页一片蓝，只有这一色能一眼认出来 */
+  --achieved: #1c7d4c;
+  --achieved-deep: #0d5a33;
+  --achieved-wash: rgba(34, 150, 94, 0.2);
+  --achieved-line: rgba(28, 125, 76, 0.55);
 
   /* 法宝三档来头：凡品压成灰蓝，灵品占灵气那支青，仙品用紫——在一片蓝里必须跳得出来 */
   --r-fan: #64809a;

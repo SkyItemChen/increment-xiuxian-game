@@ -1,16 +1,36 @@
 <script setup lang="ts">
-import { computed } from 'vue'
+import { computed, ref } from 'vue'
 import { achievementRows } from '../game/state'
+import { REALM_SEQUENCE, type AchievementRealm } from '../game/词条与属性'
 
 /**
  * 成就是一整页，和设置页、自动化页同一个做法。
  * 这页只当"解锁了什么"的账本：判定和好处都长在 state.ts 那头的门槛函数上，达成一条就永久留着。
- * 顺序按境界从练气往下排，每条方块右上角写着它属于哪一境。
+ * 按境界分档、档头可以折叠，档头自己报这一档达成几条；达成的一格整格刷青绿，
+ * 一眼就能看出这档清到哪儿了。
  */
 const emit = defineEmits<{ back: [] }>()
 
 const rows = computed(() => achievementRows())
 const done = computed(() => rows.value.filter((row) => row.unlocked).length)
+
+const groups = computed(() =>
+  REALM_SEQUENCE.map((realm) => {
+    const items = rows.value.filter((row) => row.def.realm === realm)
+    return { realm, items, done: items.filter((row) => row.unlocked).length }
+  }).filter((group) => group.items.length > 0),
+)
+
+/* 默认三档都摊开；收起按档记账，翻别的页再回来不会自己弹开 */
+const closed = ref<Partial<Record<AchievementRealm, boolean>>>({})
+
+function isOpen(realm: AchievementRealm): boolean {
+  return !closed.value[realm]
+}
+
+function toggle(realm: AchievementRealm): void {
+  closed.value = { ...closed.value, [realm]: !closed.value[realm] }
+}
 </script>
 
 <template>
@@ -27,17 +47,34 @@ const done = computed(() => rows.value.filter((row) => row.unlocked).length)
     </header>
 
     <main class="stage">
-      <div v-if="rows.length" class="grid">
-        <div v-for="row in rows" :key="row.def.id" class="tile" :class="{ done: row.unlocked }">
-          <div class="head">
-            <p class="name">{{ row.def.name }}</p>
-            <span class="tier">{{ row.def.realm }}</span>
+      <template v-if="groups.length">
+        <section v-for="group in groups" :key="group.realm" class="group">
+          <button
+            class="group-head"
+            type="button"
+            :aria-expanded="isOpen(group.realm)"
+            @click="toggle(group.realm)"
+          >
+            <span class="realm">{{ group.realm }}</span>
+            <span class="group-tally" :class="{ full: group.done === group.items.length }">
+              {{ group.done }} / {{ group.items.length }}
+            </span>
+            <span class="chev" :class="{ open: isOpen(group.realm) }" aria-hidden="true">▾</span>
+          </button>
+
+          <div v-show="isOpen(group.realm)" class="grid">
+            <div v-for="row in group.items" :key="row.def.id" class="tile" :class="{ done: row.unlocked }">
+              <p class="name">{{ row.def.name }}</p>
+              <p class="gain">{{ row.def.desc }}</p>
+              <p v-if="!row.unlocked" class="progress">{{ row.progress }}</p>
+              <span class="medal">
+                <span v-if="row.unlocked" class="check" aria-hidden="true">✓</span>
+                {{ row.unlocked ? '已 达 成' : '未 达 成' }}
+              </span>
+            </div>
           </div>
-          <p class="gain">{{ row.def.desc }}</p>
-          <p v-if="!row.unlocked" class="progress">{{ row.progress }}</p>
-          <span class="medal">{{ row.unlocked ? '已 达 成' : '未 达 成' }}</span>
-        </div>
-      </div>
+        </section>
+      </template>
       <p v-else class="empty">尚无成就</p>
     </main>
   </div>
@@ -127,6 +164,70 @@ const done = computed(() => rows.value.filter((row) => row.unlocked).length)
   overflow: auto;
 }
 
+/* 一档一折：档头整条可点，左边是境界、右边是这一档的账和一个箭头 */
+.group + .group {
+  margin-top: 18px;
+}
+
+.group-head {
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  width: 100%;
+  padding: 12px 18px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--surface-flat);
+  color: var(--ink);
+  text-align: left;
+  transition: background 0.16s ease;
+}
+
+.group-head:hover {
+  background: var(--tint-hover);
+}
+
+.realm {
+  font-size: 16px;
+  letter-spacing: 6px;
+  color: var(--accent-deep);
+  font-family: var(--font-kai);
+}
+
+.group-tally {
+  padding: 2px 10px;
+  border: 1px solid var(--accent-line);
+  border-radius: 8px;
+  background: var(--accent-wash);
+  color: var(--accent-deep);
+  font-size: 12px;
+  letter-spacing: 1px;
+  font-variant-numeric: tabular-nums;
+}
+
+.group-tally.full {
+  border-color: var(--achieved-line);
+  background: var(--achieved-wash);
+  color: var(--achieved-deep);
+}
+
+.chev {
+  margin-left: auto;
+  color: var(--ink-faint);
+  font-size: 14px;
+  line-height: 1;
+  transition: transform 0.18s ease;
+}
+
+.chev.open {
+  transform: rotate(180deg);
+}
+
+.group .grid {
+  margin-top: 12px;
+}
+
 /* 一条成就一格方块，和自动化页同一种铺法。
    宽度走 minmax 让整行拉匀，高度交给 grid-auto-rows：一格里最挤的那条把整行顶到同一高度，
    名字长短、有没有那行进度，都不再把方块撑得高一块矮一块 */
@@ -150,21 +251,15 @@ const done = computed(() => rows.value.filter((row) => row.unlocked).length)
   box-shadow: var(--shadow-panel);
 }
 
+/* 达成的一格整片转青绿：底色、描边、名字一起换，和没达成的蓝格子拉开距离 */
 .tile.done {
-  border-color: var(--accent-line);
+  border-color: var(--achieved-line);
+  background: linear-gradient(180deg, var(--achieved-wash) 0%, var(--surface-raised) 100%);
+  box-shadow: inset 0 0 0 1px var(--achieved-line), var(--shadow-panel);
 }
 
-/* 名字和境界标签挤同一行：名字占左边，标签贴着右边缘 */
-.head {
-  display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 10px;
-}
-
+/* 名字贴着左边，不再跟境界标签挤一行——分组已经把境界写在档头上了 */
 .name {
-  flex: 1 1 auto;
-  min-width: 0;
   margin: 0;
   font-size: 17px;
   letter-spacing: 3px;
@@ -172,16 +267,8 @@ const done = computed(() => rows.value.filter((row) => row.unlocked).length)
   font-family: var(--font-kai);
 }
 
-/* 这一条算在哪一境头上——不是能按的东西，所以只描个边、不给按压位移 */
-.tier {
-  flex: none;
-  padding: 3px 9px;
-  border: 1px solid var(--accent-line);
-  border-radius: 8px;
-  background: var(--accent-wash);
-  color: var(--accent-deep);
-  font-size: 11px;
-  letter-spacing: 2px;
+.tile.done .name {
+  color: var(--achieved-deep);
 }
 
 .gain {
@@ -192,6 +279,10 @@ const done = computed(() => rows.value.filter((row) => row.unlocked).length)
   line-height: 1.6;
 }
 
+.tile.done .gain {
+  color: var(--achieved);
+}
+
 .progress {
   margin: 4px 0 0;
   font-size: 12px;
@@ -200,8 +291,11 @@ const done = computed(() => rows.value.filter((row) => row.unlocked).length)
   font-variant-numeric: tabular-nums;
 }
 
-/* 达成那枚贴右下角，没达成的只留个灰框 */
+/* 达成那枚贴右下角，换成实心青绿；没达成的只留个灰框 */
 .medal {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
   margin-top: auto;
   align-self: flex-end;
   padding: 7px 12px;
@@ -213,10 +307,16 @@ const done = computed(() => rows.value.filter((row) => row.unlocked).length)
   letter-spacing: 2px;
 }
 
+.check {
+  font-size: 12px;
+  line-height: 1;
+}
+
 .tile.done .medal {
-  border-color: var(--accent-line);
-  background: var(--accent-wash);
-  color: var(--accent-deep);
+  border-color: var(--achieved-deep);
+  background: linear-gradient(180deg, var(--achieved) 0%, var(--achieved-deep) 100%);
+  color: var(--ink-invert);
+  box-shadow: 0 3px 0 var(--achieved-deep);
 }
 
 .empty {
@@ -233,6 +333,14 @@ const done = computed(() => rows.value.filter((row) => row.unlocked).length)
 @media (max-height: 700px) {
   .stage {
     padding: 14px 20px 18px;
+  }
+
+  .group + .group {
+    margin-top: 12px;
+  }
+
+  .group-head {
+    padding: 9px 14px;
   }
 
   .tile {

@@ -1,15 +1,20 @@
 // 一世模拟：`node sim/balance.mjs` 直接跑，改动法门表/转生树/门槛之后用来复核节奏。
 // 买法门的近似 = "哪条买得起就买最便宜的一级"，对应活跃玩家一路点 MAX。
-import { runLife, GATE } from './first-life-lib.mjs'
+import { runLife, GATE, pointsForOver } from './first-life-lib.mjs'
 
 const mins = (s) => (s / 60).toFixed(1)
-const row = (label, r) =>
+const row = (label, r) => {
+  const over = Math.log10(r.loop) - Math.log10(GATE)
   console.log(
-    `${label.padEnd(30)} ${mins(r.t).padStart(6)} 分   破境累计 ${r.loop.toExponential(2)}   点数 ${Math.max(1, Math.floor((Math.log10(r.loop) - Math.log10(GATE)) ** 2))}`,
+    `${label.padEnd(30)} ${mins(r.t).padStart(6)} 分   破境累计 ${r.loop.toExponential(2)}   点数 ${pointsForOver(over)}`,
   )
+}
 
-console.log('一世 = 攒到 1e10 灵气。先天根基固定 1 灵气/秒，来世快慢全看根骨树买了几级。\n')
-console.log('— 单条对照（空树一世 40.3 分）—')
+console.log('— 空树一世（五条法门各自抬过一档）：攒到 1e10 —')
+row('第一世 / 空树来世', runLife({}))
+
+console.log('\n空树一世 = 攒到 1e10 灵气。先天根基固定 1 灵气/秒，之后快慢全看根骨树买了几级。\n')
+console.log('— 单条对照（空树一世 20.2 分）—')
 for (const lv of [1, 2, 3, 5, 10, 25]) {
   row(`道基 Lv.${lv}（+20% 全部产出/级）`, runLife({ globalAdd: 0.2 * lv }))
   row(`灵根 Lv.${lv}（+50% 法门/级）`, runLife({ outputAdd: 0.5 * lv }))

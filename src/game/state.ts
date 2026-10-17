@@ -5,7 +5,7 @@ import { breakRealm, CULTIVATE_INDEX, REALMS } from './realms'
 import type { Realm } from './realms'
 import { bulkCost, LEVEL_CEILING, maxAffordable, productionOf } from './upgrades'
 import { pointsForLoop, rebirthCost } from './rebirth'
-import { drawCount, exploreCost, EXPLORE_UNLOCK_POINTS, freshSeed, insightOfStake, luckOf, nextRoll, rarityOdds, rollExplore } from './explore'
+import { drawCount, exploreCost, EXPLORE_UNLOCK_POINTS, freshSeed, insightOfStake, luckOf, nextRoll, openRarities, rarityOdds, rollExplore } from './explore'
 import type { ExploreMods, ExploreOutcome } from './explore'
 import {
   FURNACE_ID,
@@ -58,9 +58,14 @@ import {
   findRebirth,
   findUpgrade,
   GATHER_CRIT_MULT,
-  JIEDAN_AUTO_UNLOCK_LAYERS,
   JIEDAN_FURNACE_LEVEL,
   JINDAN_MILESTONES,
+  JINDAN_TREE,
+  JINDAN_TREE_PER_LAYER,
+  findJindanTree,
+  jindanInsightPerLayer,
+  jindanTreeCost,
+  jindanTreeSpent as treeSpent,
   metricLabel,
   OFFLINE_CAP_SECONDS,
   OFFLINE_REPORT_SECONDS,
@@ -79,6 +84,7 @@ import {
   type Bonus,
   type ChallengeDef,
   type ExploreDef,
+  type JindanTreeDef,
   type MilestoneDef,
   type PillLineDef,
   type PillModeDef,
@@ -143,13 +149,13 @@ export interface Settings {
   numberFormat: NumberStyle
   /** 全局速度：主循环时间轴的倍率，只在测试区里调 */
   globalSpeed: GlobalSpeed
-  /** 练气法门自动购买：系统替玩家把灵气花掉，破境仍然必须亲手按 */
+  /** 练气法门自动购买：系统替玩家把灵气花掉，破境仍然必须亲手按。五颗自动化开关一律默认关闭 */
   autoBuyCultivate: boolean
   /** 丹炉三条线的自动购买：同样只代买，结丹永远亲手按 */
   autoBuyPill: boolean
-  /** 根骨五条的自动购买：结丹三层之后才让拨，筑基点按秒自己会涨 */
+  /** 根骨五条的自动购买：五条合计 40 级之后才让拨 */
   autoBuyRebirth: boolean
-  /** 鉴宝台四条的自动购买：同上。见识只能靠手动押一铲才有，所以这一条不会把探索那颗按钮架空 */
+  /** 鉴宝台四条的自动购买：四条合计 24 级之后才让拨。见识只能靠手动押一铲才有，所以这一条不会把探索那颗按钮架空 */
   autoBuyExplore: boolean
   /** 凝练转盘的自动抽取：只花废渣，不散任何家当，所以它和丹炉那条一样归"代买" */
   autoBuyPull: boolean
@@ -213,8 +219,10 @@ export interface GameState {
   spirits: Record<string, number>
   /** 抽过几次转盘：抽卡价按它往上走，所以废渣这条线也只有一条涨价的墙 */
   pulls: number
-  /** 结过几次丹。每一层给法门灵气/秒 +100%，所以一世时长严格除以 (1 + 层数) */
+  /** 结过几次丹。首层产出 ×2、之后每层 ×1.25，所以一世时长大约被这个倍率除掉 */
   jindan: number
+  /** 丹纹四枝的等级。点数从结丹层数与结丹里程碑来，点法由玩家定，不接自动化 */
+  jindanTree: Record<string, number>
   /** 定价用的锚：见过的最高灵气/秒（log10）。只涨不跌，所以"自废流量再买丹"讨不到便宜 */
   pillAnchor: number
   /** 抽取序列的游标：预览与结算共用它，取消再点开不会重抽 */
@@ -267,6 +275,7 @@ function freshState(): GameState {
     spirits: {},
     pulls: 0,
     jindan: 0,
+    jindanTree: {},
     pillAnchor: 0,
     seed: freshSeed(),
     gatherCritChance: 0,
@@ -583,7 +592,11 @@ function counters(): BonusCounters {
     insightEarned: state.insightEarned,
     explores: state.explores,
     pointsEarned: state.pointsEarned,
+    rootLevels: Object.values(state.rebirth).reduce((a, b) => a + b, 0),
+    benchLevels: Object.values(state.exploreLevels).reduce((a, b) => a + b, 0),
+    treasures: Object.values(state.treasures).filter((lv) => lv > 0).length,
     qiLog10: state.totalEarned.log10(),
+    jindanTree: state.jindanTree,
   }
 }
 
@@ -598,9 +611,10 @@ export function activeBonus(): Bonus {
  * 否则乘法法门跨境界叠加会让产出爆掉境界阈值。根基倍率与速度则跨境界连乘，升级不白买。
  * 灵根给法门那份灵气/秒加加成，道基连先天根基和法宝一起乘——两条的分工就在这。
  * 法宝是探索带出来的家当，聚宝盆补在产出里、乾坤鼎把总产出连乘起来。
- * 丹房与结丹回溯都挂在道基那条加法轴上：这条轴乘在整份产出上，所以一世时长严格被它除掉，
- * 这正是结丹回溯要的效果（+100%/层 ⇒ 一世除以 (1+层数)）。
- * 挑战、结丹里程碑、加属性成就白给的那几笔（`activeBonus()`）也添在这几条现成的轴上，不新起第六条轴。
+ * 丹房挂在道基那条加法轴上；结丹回溯是另一条独立的乘法（首层 ×2、之后每层 ×1.25）。
+ * 两条都乘在整份产出上，所以一世时长被它们除掉——结丹要靠乘法轴才够得着元婴门槛。
+ * 挑战、结丹里程碑、加属性成就、丹纹四枝白给的那几笔（`activeBonus()`）也添在这几条现成的轴上，不新起第六条轴。
+ * 练气一世 20 分钟的定标落在五条法门各自的 power 上（见 `词条与属性.ts`），这里不再另乘基准倍率。
  */
 export function recompute(): void {
   const { globalAdd, outputAdd, critChance } = rebirthMods()
@@ -739,6 +753,9 @@ function achievementEarned(metric: AchievementDef['metric']): number {
   if (metric === 'layers') return state.jindan
   if (metric === 'turns') return state.pulls
   if (metric === 'explores') return state.explores
+  if (metric === 'root') return Object.values(state.rebirth).reduce((a, b) => a + b, 0)
+  if (metric === 'bench') return Object.values(state.exploreLevels).reduce((a, b) => a + b, 0)
+  if (metric === 'treasures') return Object.values(state.treasures).filter((lv) => lv > 0).length
   return state.pointsEarned
 }
 
@@ -1116,7 +1133,7 @@ export function exploreOdds(): {
   return {
     stake: state.points,
     count: drawCount(mods),
-    odds: rarityOdds(mods.yanLi, luckOf(state.treasures, mods)),
+    odds: rarityOdds(mods.yanLi, luckOf(state.treasures, mods), openRarities(state.treasures)),
     stakeInsight: insightOfStake(Math.floor(state.points), mods),
     insight: state.insight,
   }
@@ -1438,26 +1455,51 @@ export function pullUnlocked(): boolean {
   return pillUnlocked()
 }
 
+/** 一条成就自己那本账：解锁看 `挑战.ts` 的唯一判定，进度照同一笔累计念 */
+function achievementGate(id: string): { unlocked: boolean; earned: number; need: number } {
+  const def = ACHIEVEMENTS.find((d) => d.id === id)
+  if (!def) return { unlocked: false, earned: 0, need: 1 }
+  return {
+    unlocked: achievementUnlocked(def, counters()),
+    earned: achievementEarned(def.metric),
+    need: def.need,
+  }
+}
+
 /**
- * 结丹三层解锁的两条代买：根骨与鉴宝台。开关各拨各的，门槛是成就「丹成三转」那一条。
+ * 根骨与鉴宝台的代买各看各的成就，两条门槛彻底分开：
+ * 根骨看五条合计等级，鉴宝台看四条合计等级，先满哪条就先放开哪条。
  * 代买只把手上的钱花掉——押探索那一铲、结丹那一下永远还是玩家按的。
  * 鉴宝台这条尤其不会把探索架空：见识只有押了探索才产得出来，系统能花它、产不出它。
  */
-export function autoBuyTreeGate(): { unlocked: boolean; earned: number; need: number } {
-  return {
-    unlocked: state.jindan >= JIEDAN_AUTO_UNLOCK_LAYERS,
-    earned: state.jindan,
-    need: JIEDAN_AUTO_UNLOCK_LAYERS,
-  }
+export function autoBuyRebirthGate(): { unlocked: boolean; earned: number; need: number } {
+  return achievementGate('autoBuyRebirth')
+}
+
+export function autoBuyExploreGate(): { unlocked: boolean; earned: number; need: number } {
+  return achievementGate('autoBuyExplore')
 }
 
 /** 开关拨上、成就也到了，主循环才真的代买 */
 export function autoBuyRebirthActive(): boolean {
-  return state.settings.autoBuyRebirth && autoBuyTreeGate().unlocked
+  return state.settings.autoBuyRebirth && autoBuyRebirthGate().unlocked
 }
 
 export function autoBuyExploreTreeActive(): boolean {
-  return state.settings.autoBuyExplore && autoBuyTreeGate().unlocked
+  return state.settings.autoBuyExplore && autoBuyExploreGate().unlocked
+}
+
+/**
+ * 读档后把没解锁的自动化开关拨回关闭。
+ * 开关本身存在存档里，旧档或手改的档可能带着"成就没达成却开着"的状态；
+ * 这里按同一份成就判定收一遍，保证界面上永远不会出现这种开关。
+ */
+function syncAutomationSettings(): void {
+  if (!autoBuyGate().unlocked) state.settings.autoBuyCultivate = false
+  if (!autoBuyPillGate().unlocked) state.settings.autoBuyPill = false
+  if (!autoBuyRebirthGate().unlocked) state.settings.autoBuyRebirth = false
+  if (!autoBuyExploreGate().unlocked) state.settings.autoBuyExplore = false
+  if (!autoPullGate().unlocked) state.settings.autoBuyPull = false
 }
 
 /** 结丹的账面：门槛差多少、结成之后产出乘几 */
@@ -1500,6 +1542,8 @@ export interface JindanPreview {
   wiped: { def: UpgradeDef; level: number }[]
   /** 下一世的灵气产出乘这个倍率 */
   mult: number
+  /** 结成这一层另给的见识：底数 1 点，识海每 5 级再添 1 点 */
+  insightGain: number
 }
 
 export function previewJindan(): JindanPreview | null {
@@ -1514,6 +1558,7 @@ export function previewJindan(): JindanPreview | null {
     spirit: state.spirit.clone(),
     wiped,
     mult: g.mult,
+    insightGain: jindanInsightPerLayer(state.jindanTree),
   }
 }
 
@@ -1521,6 +1566,7 @@ export function previewJindan(): JindanPreview | null {
  * 结丹：散掉的还是**修行那一层**——法门与手上灵气清零，根骨、法宝、鉴宝台、丹和三条线都跟着走。
  * 手上那笔灵气是硬代价：攒够 1e30 存量才结得成，这一世就一分也花不到别处去。
  * 累计灵气不清零，所以按秒折给那条进项（`pointPassPerSecond`）跨得过结丹。
+ * 每结一层另给一笔见识——底数 1 点，识海那一枝再往上添，让见识不必只靠押探索。
  * 自动化不碰这里（和破境同一条规矩），这颗按钮永远由玩家按。
  */
 export function jindanBreak(): boolean {
@@ -1530,12 +1576,93 @@ export function jindanBreak(): boolean {
   state.spirit = BigNumber.zero()
   state.loopEarned = BigNumber.zero()
   state.jindan = p.layer
+  state.insight += p.insightGain
+  state.insightEarned += p.insightGain
   state.realmIndex = Math.max(state.realmIndex, JINDAN_INDEX)
   gatherAcc = 0
   state.gatherProgress = 0
   recompute()
   refreshDisplay()
   saveGame()
+  return true
+}
+
+/** 结丹与结丹里程碑一共发过多少丹纹点；层数与里程碑都只涨不跌，所以可以随时回算 */
+export function jindanTreeEarned(): number {
+  let earned = state.jindan * JINDAN_TREE_PER_LAYER
+  for (const def of JINDAN_MILESTONES) {
+    if (state.jindan >= def.layer) earned += def.marks ?? 0
+  }
+  return earned
+}
+
+/** 已经点在四枝上的丹纹点 */
+export function jindanTreeSpent(): number {
+  return treeSpent(state.jindanTree)
+}
+
+/** 手上还剩多少丹纹点。和筑基点一样，先算累计再减花掉，不另存一栏 */
+export function jindanTreePoints(): number {
+  return Math.max(0, Math.floor(jindanTreeEarned() - jindanTreeSpent()))
+}
+
+export interface JindanTreeRow {
+  def: JindanTreeDef
+  level: number
+  cost: number
+  current: string
+  next: string
+  maxed: boolean
+  affordable: boolean
+}
+
+/** 一枝当前/下一级念成大白话；识海要把"还差几级跳一档"写出来，否则点一级看不出变化 */
+function treeEffectText(def: JindanTreeDef, level: number): string {
+  if (def.kind === 'insight-add') {
+    const perLayer = JINDAN_TREE_PER_LAYER + Math.floor(level * def.power)
+    if (level >= def.cap) return `每层结丹共攒 ${perLayer} 点见识`
+    const step = Math.max(1, Math.round(1 / def.power))
+    return `每层结丹攒 ${perLayer} 点，再 ${step - (level % step)} 级多 1 点`
+  }
+  if (level <= 0) return '尚未参悟'
+  if (def.kind === 'dreg-add') return `废渣 +${Math.round(def.power * level * 100)}%`
+  if (def.kind === 'energy-add') return `灵气产出 +${Math.round(def.power * level * 100)}%`
+  return `出丹 +${Math.round(def.power * level * 100)}%`
+}
+
+/** 丹纹四枝的行：价钱、当前效果、下一级效果都在这里算好，界面只负责摆 */
+export function jindanTreeRows(): JindanTreeRow[] {
+  const points = jindanTreePoints()
+  return JINDAN_TREE.map((def) => {
+    const level = Math.min(def.cap, Math.max(0, Math.floor(state.jindanTree[def.id] ?? 0)))
+    const maxed = level >= def.cap
+    const cost = maxed ? 0 : jindanTreeCost(level)
+    return {
+      def,
+      level,
+      cost,
+      current: treeEffectText(def, level),
+      next: maxed ? '已点满' : treeEffectText(def, level + 1),
+      maxed,
+      affordable: !maxed && points >= cost,
+    }
+  })
+}
+
+/**
+ * 点一级丹纹。点数只从结丹与里程碑来，所以这里没有"买多少级"的档位，
+ * 也没有自动化——先升哪一枝就是这一层唯一的策略，交给系统代点等于把玩法删掉。
+ */
+export function buyJindanTree(id: string): boolean {
+  const def = findJindanTree(id)
+  if (!def) return false
+  const level = Math.min(def.cap, Math.max(0, Math.floor(state.jindanTree[id] ?? 0)))
+  if (level >= def.cap) return false
+  const cost = jindanTreeCost(level)
+  if (jindanTreePoints() < cost) return false
+  state.jindanTree[id] = level + 1
+  recompute()
+  refreshDisplay()
   return true
 }
 
@@ -1610,10 +1737,16 @@ export function devAddDan(n = 100): void {
  *   [22] 累计见识 [23] 丹存量 [24] 结丹层数 [25] 定价锚（灵气/秒的 log10）[26] 丹炉三条线等级
  *   [27] 筑基点零头（按秒折算攒下的那不足 1 点，四位小数）
  *   [28] 废渣存量 [29] 抽过的次数 [30] 七道丹道精神等级 [31] 火候档位下标
+ *   [32] 丹纹四枝等级（按 JINDAN_TREE 的顺序摆）
  *
  * 键名占掉快一半长度，所以新字段**只往后加、别插队**——位置就是格式，插中间等于把所有存档读坏。
+ *
+ * v14 没有加字段，只做一次偏好迁移：v13 及更早的档读进来时把五颗自动化开关全部归零。
+ * v15 再收一次口：v14 及更早一律全关——v14 曾短暂存在过"根骨/鉴宝台拆开但读档还没收开关"的档，
+ * 玩家手里可能已经导出过那种码，所以再给一版一次性归零；自动保存那一位照旧保留。
+ * v16 加丹纹四枝 [32]；点数不存（按结丹层数与里程碑现算），老档读进来四枝全空。
  */
-const SAVE_VERSION = 13
+const SAVE_VERSION = 16
 
 /** 读档用的键控结构：定长数组解出来就是这个形状 */
 interface SaveData {
@@ -1644,6 +1777,8 @@ interface SaveData {
   /** 抽过的次数：抽卡价按它往上爬，所以它必须存 */
   pulls: number
   jindan: number
+  /** 丹纹四枝的等级：只存等级，点数由结丹层数与里程碑现算 */
+  jindanTree: Record<string, number>
   /** 定价锚：见过的最高灵气/秒。老存档没这一栏，读进来由 recompute() 按当前流量补 */
   pillAnchor: number
   seed: number
@@ -1718,6 +1853,7 @@ function snapshot(): SaveData {
     spirits: { ...state.spirits },
     pulls: state.pulls,
     jindan: state.jindan,
+    jindanTree: { ...state.jindanTree },
     pillAnchor: state.pillAnchor,
     seed: state.seed,
     totalGathers: state.totalGathers,
@@ -1769,6 +1905,7 @@ function toCode(d: SaveData): (number | number[])[] {
     d.pulls,
     encodeLevels(SPIRITS, d.spirits),
     PILL_MODES.findIndex((m) => m.id === d.pillMode),
+    encodeLevels(JINDAN_TREE, d.jindanTree),
   ]
 }
 
@@ -1780,9 +1917,12 @@ function at<T>(table: readonly T[], index: unknown, fallback: T): T {
 
 /** 定长数组收回存档对象。缺位的字段一律按"没有"处理，不接受 NaN */
 function fromCode(a: unknown[]): Partial<SaveData> {
-  const flags = Math.floor(Number(a[18])) || 0
+  const v = Math.floor(Number(a[0]))
+  const rawFlags = Math.floor(Number(a[18])) || 0
+  // v15 起五颗自动化开关重新默认关闭：保留自动保存那一位，其余全抹掉
+  const flags = v >= 15 ? rawFlags : rawFlags & ~(2 | 4 | 8 | 16 | 32)
   return {
-    v: Math.floor(Number(a[0])),
+    v,
     spirit: a[1] as [number, number],
     totalEarned: a[2] as [number, number],
     loopEarned: a[3] as [number, number],
@@ -1796,6 +1936,7 @@ function fromCode(a: unknown[]): Partial<SaveData> {
     insightEarned: Math.max(0, Math.floor(Number(a[22])) || 0),
     dan: a[23] as [number, number],
     jindan: Math.max(0, Math.floor(Number(a[24])) || 0),
+    jindanTree: decodeLevels(JINDAN_TREE, a[32]),
     pillAnchor: Math.max(0, Number(a[25]) || 0),
     pillLevels: decodeLevels(PILL_LINES, a[26]),
     dreg: a[28] as [number, number],
@@ -1861,6 +2002,9 @@ function applySave(d: Partial<SaveData>): boolean {
   state.pulls = Math.max(0, Math.floor(d.pulls ?? 0))
   state.pillMode = d.pillMode ?? DEFAULT_PILL_MODE
   state.jindan = Math.max(0, Math.floor(d.jindan ?? 0))
+  // 四枝等级按现算的点数收口：花掉的比挣到的多，只可能是改过的档，整棵清空
+  state.jindanTree = d.jindanTree ?? {}
+  if (treeSpent(state.jindanTree) > jindanTreeEarned()) state.jindanTree = {}
   // 定价锚取"存档里的"和"当前流量"的较大者：老存档没这一栏，读档那次 recompute 会把它补上
   state.pillAnchor = Math.max(0, d.pillAnchor ?? 0)
   // 种子是 0 就重开一串，别让 xorshift 卡在不动的零上
@@ -1883,6 +2027,8 @@ function applySave(d: Partial<SaveData>): boolean {
   danAcc = 0
   state.pillProgress = 0
   recompute()
+  // 门槛没到的自动化开关一律关掉：旧档读进来不该自己跑起来
+  syncAutomationSettings()
   // 换了一份进度，比对基准要跟着换：这份档里早就达成的成就别再报一遍
   reseedAchievements()
   refreshDisplay()

@@ -47,6 +47,11 @@ export function freshSeed(): number {
  *
  * 造化玉碟叠出来的 `luck` 仍按两档不对称吃：灵品一层、仙品两层。
  * 同倍率乘上去只压得动凡品占比，仙品被灵品压着，玩家会觉得这条词条是空的。
+ *
+ * 但凡品不能真的被饿死：眼力到 Lv.10 时凡品只剩 1%，Lv.60 只剩 0.08%，
+ * 这时凡品那 22 层根本收不齐。所以**凡品还没收满时给它保一个占比下限**（见 FAN_FLOOR），
+ * 收满之后下限自动撤掉，眼力原样把仙品推回九成。已收满的品质也直接移出抽池，
+ * 免得抽中了只能换见识、把机会从还没收满的那档手里抢走。
  */
 const LING_PER_LEVEL = 0.35
 const LING_CAP = 6
@@ -54,6 +59,8 @@ const LING_CAP = 6
 export const XIAN_START_YANLI = 3
 const XIAN_PER_LEVEL = 0.3
 const XIAN_CAP = 3
+/** 凡品还没收满时，它在总权重里至少占这么多 */
+export const FAN_FLOOR = 0.2
 
 /** 鉴宝台买出来的四条修正量，缺省就是"一条都没参悟" */
 export interface ExploreMods {
@@ -69,6 +76,17 @@ export interface ExploreMods {
 
 export const NO_EXPLORE_MODS: ExploreMods = { yanLi: 0, energyAdd: 0, tieChan: 0, insightGain: 0 }
 
+const ALL_OPEN: Record<TreasureRarity, boolean> = { fan: true, ling: true, xian: true }
+
+/** 这一档还有没有没到 cap 的法宝；全收满的档不再参与抽池 */
+export function openRarities(treasureLevels: Record<string, number>): Record<TreasureRarity, boolean> {
+  const open: Record<TreasureRarity, boolean> = { fan: false, ling: false, xian: false }
+  for (const def of TREASURES) {
+    if ((treasureLevels[def.id] ?? 0) < def.cap) open[def.rarity] = true
+  }
+  return open
+}
+
 /** 造化玉碟 × 眼力 叠出来的机会倍率 */
 export function luckOf(treasureLevels: Record<string, number>, mods: ExploreMods): number {
   const die = findTreasure('zaoHuaYuDie')
@@ -77,21 +95,42 @@ export function luckOf(treasureLevels: Record<string, number>, mods: ExploreMods
   return (1 + die.power * (treasureLevels[die.id] ?? 0)) * (1 + yanLiDef.power * mods.yanLi)
 }
 
-export function rarityWeights(yanLi: number, luck: number): Record<TreasureRarity, number> {
+export function rarityWeights(
+  yanLi: number,
+  luck: number,
+  open: Record<TreasureRarity, boolean> = ALL_OPEN,
+): Record<TreasureRarity, number> {
   const lv = Math.max(yanLi, 0)
-  return {
+  const base: Record<TreasureRarity, number> = {
     fan: 1,
     ling: Math.min(LING_PER_LEVEL * lv, LING_CAP) * luck,
     xian: lv <= XIAN_START_YANLI
       ? 0
       : Math.min(XIAN_PER_LEVEL * (lv - XIAN_START_YANLI), XIAN_CAP) * luck * luck,
   }
+  // 三档全收满时保留原权重：那一铲本来就只换见识，roll 到哪一档都只是见识的数字
+  if (!open.fan && !open.ling && !open.xian) return base
+  const w: Record<TreasureRarity, number> = {
+    fan: open.fan ? base.fan : 0,
+    ling: open.ling ? base.ling : 0,
+    xian: open.xian ? base.xian : 0,
+  }
+  if (w.fan > 0) {
+    const others = w.ling + w.xian
+    w.fan = Math.max(w.fan, (others * FAN_FLOOR) / (1 - FAN_FLOOR))
+  }
+  return w
 }
 
-/** 界面用：各品质的出土概率（0..1） */
-export function rarityOdds(yanLi: number, luck: number): Record<TreasureRarity, number> {
-  const w = rarityWeights(yanLi, luck)
+/** 界面用：各品质的出土概率（0..1）。收满的档不参与，凡品未满时吃占比下限 */
+export function rarityOdds(
+  yanLi: number,
+  luck: number,
+  open: Record<TreasureRarity, boolean> = ALL_OPEN,
+): Record<TreasureRarity, number> {
+  const w = rarityWeights(yanLi, luck, open)
   const total = w.fan + w.ling + w.xian
+  if (total <= 0) return { fan: 0, ling: 0, xian: 0 }
   return { fan: w.fan / total, ling: w.ling / total, xian: w.xian / total }
 }
 
@@ -115,8 +154,8 @@ export function insightOf(rarity: TreasureRarity, mods: ExploreMods): number {
 /**
  * 探索的门槛：累计攒够这么多筑基点才开启遗迹。
  * 看的是"累计攒到"而不是"手上还剩"——点数一押就清零，用余额当门槛会把已经解锁的人再锁回去。
- * 100 这点是 sim/zhuji-hours.mjs 量的：按摸到门槛就破境的最速流程，累计 100 点落在 2.6 小时上下，
- * 正是把玩家从根骨交给法宝的位置；再往后一世只剩几十秒，破境本身已经没内容了。
+ * 100 这点是 sim/realm-timeline.mjs 量的：按摸到门槛就破境的最速流程，
+ * 累计 100 点落在 1.2 小时上下，正是把玩家从根骨交给法宝的位置；再往后一世只剩几十秒，破境本身已经没内容了。
  */
 export const EXPLORE_UNLOCK_POINTS = 100
 
@@ -167,8 +206,9 @@ export function rollExplore(
 ): ExploreOutcome {
   const stake = Math.floor(points)
   const luck = luckOf(treasureLevels, mods)
-  const odds = rarityOdds(mods.yanLi, luck)
-  const weights = rarityWeights(mods.yanLi, luck)
+  const open = openRarities(treasureLevels)
+  const odds = rarityOdds(mods.yanLi, luck, open)
+  const weights = rarityWeights(mods.yanLi, luck, open)
   const total = weights.fan + weights.ling + weights.xian
   const owned = { ...treasureLevels }
   const byRarity: Record<TreasureRarity, TreasureDef[]> = { fan: [], ling: [], xian: [] }
@@ -180,6 +220,13 @@ export function rollExplore(
   let insight = 0
 
   for (let i = 0; i < drawCount(mods); i++) {
+    if (total <= 0) {
+      // 能挖的档都收齐了、剩下的品质又还没到眼力解锁的级数：这一铲只攒见识
+      const gained = insightOf('fan', mods)
+      insight += gained
+      insights.push({ rarity: 'fan', insight: gained })
+      continue
+    }
     let roll: number
     ;[roll, next] = nextRoll(next)
     let acc = 0
@@ -192,9 +239,21 @@ export function rollExplore(
       }
     }
     // 只挖还没圆满的，挖到过手的自然不重复
-    const pool = byRarity[hit].filter((def) => (owned[def.id] ?? 0) < def.cap)
+    let pool = byRarity[hit].filter((def) => (owned[def.id] ?? 0) < def.cap)
     if (pool.length === 0) {
-      // 整档都收集齐了：这一铲不空手，改攒见识
+      // 这一档在本次抽到一半时收满了：顺延到还有空位的档（高的优先），别让空档吃掉这一铲
+      for (const alt of [...RARITY_ORDER].reverse()) {
+        if (alt === hit) continue
+        const altPool = byRarity[alt].filter((def) => (owned[def.id] ?? 0) < def.cap)
+        if (altPool.length > 0) {
+          hit = alt
+          pool = altPool
+          break
+        }
+      }
+    }
+    if (pool.length === 0) {
+      // 三档全收齐了：这一铲不空手，改攒见识
       const gained = insightOf(hit, mods)
       insight += gained
       insights.push({ rarity: hit, insight: gained })

@@ -2,6 +2,7 @@ import {
   ACHIEVEMENTS,
   CHALLENGES,
   JINDAN_MILESTONES,
+  JINDAN_TREE,
   SPIRITS,
   addBonus,
   noBonus,
@@ -15,7 +16,7 @@ import {
 import type { SpiritLevels } from './凝练'
 
 /**
- * 挑战、结丹里程碑、加属性成就——三张表合起来的一本账。
+ * 挑战、结丹里程碑、加属性成就，再加丹纹四枝——合起来的一本账。
  * 表本身在 [词条与属性.ts](./词条与属性.ts)，这个模块**不碰 state**，
  * 只收一笔笔累计的数（`BonusCounters`）再把达成与否、白给多少一并算出来，
  * 所以 `sim/challenge-check.mjs` 能直接 import 它核对落点（和 `金丹丹炉.ts`、`凝练.ts` 同一条规矩）。
@@ -24,7 +25,7 @@ import type { SpiritLevels } from './凝练'
  * 1. **门槛只读只涨不跌的那几笔账**——三条线的等级、累计抽数、七道精神的等级、已结层数、累计探索/见识/灵气。
  *    散功（结丹、押探索）清的是手上的灵气与法门修为，这些账一笔都不清，所以达成之后不会又锁回去。
  * 2. **好处一律落在链上现成的五条轴**（见词条里 `Bonus` 那段），不新起第六条算法轴。
- * 3. **零存档字段**：这一切都是从别的字段推出来的，读老存档不用迁移。
+ * 3. **零存档字段**：三张表的好处都是从别的字段推出来的；只有丹纹等级要存，因为那是玩家亲手点的选择。
  */
 
 /** 判定要读的那几笔累计。灵气那一笔动不动上百位，折成 log10 交进来就够比较了 */
@@ -37,8 +38,16 @@ export interface BonusCounters {
   explores: number
   /** 累计筑基点 */
   pointsEarned: number
+  /** 根骨五条合计等级 */
+  rootLevels: number
+  /** 鉴宝台四条合计等级 */
+  benchLevels: number
+  /** 已收到的法宝件数（按件算，不按层算） */
+  treasures: number
   /** 累计灵气到过多少（log10） */
   qiLog10: number
+  /** 丹纹四枝的等级。丹纹是玩家花点数点出来的，不在这三张表的累计账里 */
+  jindanTree?: Record<string, number>
 }
 
 /** 成就看的那笔账如今是多少；qi 那一笔走 log10，由 `achievementUnlocked` 自己分派 */
@@ -47,6 +56,9 @@ export function metricValue(metric: AchievementMetric | undefined, c: BonusCount
   if (metric === 'layers') return c.jindan
   if (metric === 'turns') return c.pulls
   if (metric === 'explores') return c.explores
+  if (metric === 'root') return c.rootLevels
+  if (metric === 'bench') return c.benchLevels
+  if (metric === 'treasures') return c.treasures
   return c.pointsEarned
 }
 
@@ -79,13 +91,26 @@ export function milestoneUnlocked(def: MilestoneDef, c: BonusCounters): boolean 
   return c.jindan >= def.layer
 }
 
-/** 三张表合起来的加成。达成几条就添几笔，没达成的连 0 都不添 */
+/**
+ * 三张表 + 丹纹四枝合起来的加成。达成几条就添几笔，没达成的连 0 都不添。
+ * 丹纹是玩家亲手点的永久等级，所以它不进 `JINDAN_MILESTONES` 那种按层数推导的表，
+ * 而是在这里和另外三张表并进同一本账——产出公式只认 `activeBonus()`，不另开私房倍率。
+ */
 export function totalBonus(c: BonusCounters): Bonus {
   let sum = noBonus()
   for (const def of CHALLENGES) if (challengeUnlocked(def, c)) sum = addBonus(sum, def.bonus)
   for (const def of JINDAN_MILESTONES) if (milestoneUnlocked(def, c)) sum = addBonus(sum, def.bonus)
   for (const def of ACHIEVEMENTS) if (def.bonus && achievementUnlocked(def, c)) sum = addBonus(sum, def.bonus)
-  return sum
+  const tree = c.jindanTree ?? {}
+  const treeBonus = noBonus()
+  for (const def of JINDAN_TREE) {
+    const lv = Math.min(def.cap, Math.max(0, Math.floor(tree[def.id] ?? 0)))
+    if (!lv) continue
+    if (def.kind === 'dan-add') treeBonus.danAdd = (treeBonus.danAdd ?? 0) + def.power * lv
+    else if (def.kind === 'energy-add') treeBonus.energyAdd = (treeBonus.energyAdd ?? 0) + def.power * lv
+    else if (def.kind === 'dreg-add') treeBonus.dregMul = (treeBonus.dregMul ?? 1) * (1 + def.power * lv)
+  }
+  return addBonus(sum, treeBonus)
 }
 
 /** 出丹那条加法：白给的几成丹和武火添在同一个加数上 */

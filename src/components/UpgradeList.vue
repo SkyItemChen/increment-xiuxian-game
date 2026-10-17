@@ -37,9 +37,8 @@ const rows = computed(() => {
 /** 「不取一毫」这条成就是被动的：达标就把灵气省下，界面上得说清楚为什么钱没少 */
 const anyFree = computed(() => rows.value.some((row) => row.free))
 
-/** 一键购买：这个存档破进过一次筑基就永久解锁，探索把本世清零也不该收回去 */
-const buyAllUnlocked = computed(() => state.realmIndex >= 1)
-const canBuyAll = computed(() => buyAllUnlocked.value && rows.value.some((r) => r.canMax))
+/** 一键购买：一级都买不起时靠"买不买得起"把按钮关掉 */
+const canBuyAll = computed(() => rows.value.some((r) => r.canMax))
 
 function onBuyAll(): void {
   buyAllFromEnd(props.defs.map((def) => def.id))
@@ -51,7 +50,6 @@ function onBuyAll(): void {
     <div class="head">
       <h2 class="heading">法 门</h2>
       <button
-        v-if="buyAllUnlocked"
         class="all"
         type="button"
         :class="{ ready: canBuyAll }"

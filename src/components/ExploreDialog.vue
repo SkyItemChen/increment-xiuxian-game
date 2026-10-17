@@ -24,6 +24,12 @@ const odds = computed(() =>
 
 const emptyText = computed(() => props.outcome.draws.length === 0)
 
+/** 三档权重全是 0：能挖的档都收齐了，剩下的品质眼力还够不着，这一铲只换见识 */
+const dry = computed(() => {
+  const o = props.outcome.odds
+  return o.fan + o.ling + o.xian <= 0
+})
+
 /** 一行摊平的战利品 */
 interface Stack {
   def: TreasureDef
@@ -85,11 +91,17 @@ const stacks = computed<Stack[]>(() => {
             <p class="drop-effect">{{ s.def.effect }} · {{ s.def.lore }}</p>
           </li>
         </ul>
-        <p v-else class="loot-empty">这一带的法宝都已收齐，这一铲只攒见识。</p>
+        <p v-else class="loot-empty">
+          {{ dry ? '眼力还够不着剩下的法宝，这一铲只攒见识。' : '这一带的法宝都已收齐，这一铲只攒见识。' }}
+        </p>
         <ul class="lines">
-          <li>
+          <li v-if="!dry">
             <span class="key">出土机会</span>
             <span class="val tiny">{{ odds }}</span>
+          </li>
+          <li v-else>
+            <span class="key">出土机会</span>
+            <span class="val tiny">没有可挖的档</span>
           </li>
           <li>
             <span class="key">押注折算</span>

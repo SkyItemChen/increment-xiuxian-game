@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { fmt, type JindanPreview } from '../game/state'
+import { fmt, fmtNum, type JindanPreview } from '../game/state'
+import { JINDAN_TREE_PER_LAYER } from '../game/词条与属性'
 
 /** 结丹确认弹窗：散掉修行那一层、换一层金丹，代价与所得都摊开写 */
 const props = defineProps<{ preview: JindanPreview }>()
@@ -12,10 +13,10 @@ const wipedText = computed(() =>
 
 const noneText = computed(() => props.preview.wiped.length === 0)
 
-/** 一层金丹把修行快一倍，层数叠上去就是"快几倍"，说人话不写倍率式子 */
+/** 首层快一倍，往后每层 ×1.25；层数高了走同一套缩写，别甩一串原始数字 */
 const fasterText = computed(() => {
   const n = props.preview.mult - 1
-  return n <= 1 ? '快一倍' : `快 ${n} 倍`
+  return n <= 1 ? '快一倍' : `快 ${fmtNum(n)} 倍`
 })
 </script>
 
@@ -57,6 +58,10 @@ const fasterText = computed(() => {
           <li>
             <span class="key">丹与丹炉</span>
             <span class="val">一分不散，跟着人走</span>
+          </li>
+          <li>
+            <span class="key">见识与丹纹</span>
+            <span class="val">见识 +{{ preview.insightGain }} 点 · 丹纹 +{{ JINDAN_TREE_PER_LAYER }} 点</span>
           </li>
         </ul>
         <p class="note">根骨、法宝、鉴宝台、筑基点也一样留着。金丹这一层攒的只是修行快多少，一世多长。</p>

@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
-import { autoBuyGate, autoBuyPillGate, autoBuyTreeGate, autoPullGate, state } from '../game/state'
+import { autoBuyExploreGate, autoBuyGate, autoBuyPillGate, autoBuyRebirthGate, autoPullGate, state } from '../game/state'
 
 /**
  * 自动化是一整页，和设置页同一个做法。
@@ -24,8 +24,9 @@ const pullGate = computed(() => autoPullGate())
 const pullText = computed(() =>
   state.settings.autoBuyPull ? '系统正在替你转凝练的盘子' : '还没有开启，废渣得自己攒着转',
 )
-/** 结丹满三层才把根骨和鉴宝台交给系统，门槛写在成就「丹成三转」里 */
-const treeGate = computed(() => autoBuyTreeGate())
+/** 根骨与鉴宝台各看各的等级门槛，谁先满谁先交给系统 */
+const rebirthGate = computed(() => autoBuyRebirthGate())
+const benchGate = computed(() => autoBuyExploreGate())
 </script>
 
 <template>
@@ -49,7 +50,7 @@ const treeGate = computed(() => autoBuyTreeGate())
           </label>
         </div>
 
-        <div v-if="treeGate.unlocked" class="tile">
+        <div v-if="rebirthGate.unlocked" class="tile">
           <p class="name">筑基根骨自动购买</p>
           <p class="desc">
             {{ state.settings.autoBuyRebirth ? '系统正在替你往根骨上花筑基点' : '还没有开启，根骨得自己点着点' }}
@@ -60,7 +61,7 @@ const treeGate = computed(() => autoBuyTreeGate())
           </label>
         </div>
 
-        <div v-if="treeGate.unlocked" class="tile">
+        <div v-if="benchGate.unlocked" class="tile">
           <p class="name">鉴宝台自动购买</p>
           <p class="desc">
             {{ state.settings.autoBuyExplore ? '系统正在替你搭鉴宝台' : '还没有开启，鉴宝台得自己点着搭' }}

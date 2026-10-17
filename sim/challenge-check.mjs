@@ -30,6 +30,9 @@ const ZERO = {
   insightEarned: 0,
   explores: 0,
   pointsEarned: 0,
+  rootLevels: 0,
+  benchLevels: 0,
+  treasures: 0,
   qiLog10: -Infinity,
 }
 
@@ -84,7 +87,7 @@ const FLOWS = [
 ]
 
 console.log('【五档挑战的落点】按运行时那套贪心买法，各档流量要挂多久')
-console.log(`  结到第 n 层 ≈ 灵气/秒 ×(1+n)，所以左边那列可以理解成"结过几层丹之后"的那一世`)
+console.log(`  结过 n 层丹之后，这一世的灵气/秒 ≈ 定标流量 × jindanReturnMult(n)；左列仍是各档的实际流量`)
 console.log(`  ${''.padEnd(30)}${FLOWS.map(([name]) => name.padStart(13)).join('')}`)
 for (const def of CHALLENGES) {
   const need = def.need
@@ -118,7 +121,7 @@ const probes = [
   ['只有三条线炼满', { pillLevels: { danLu: 99, huoHou: 99, danFang: 99 } }],
   ['只把转盘抽到底（连带百转成渣那条挑战）', { pulls: 1e6 }],
   ['只把七道精神参悟到底', { spirits: Object.fromEntries(SPIRITS.map((s) => [s.id, 99])) }],
-  ['九条成就全开（抽数那几条顺带咬合）', { qiLog10: 40, pulls: 1e6, explores: 99, jindan: 40 }],
+  ['加属性成就全开（抽数那几条顺带咬合）', { qiLog10: 40, pulls: 1e6, explores: 99, jindan: 40, rootLevels: 99, benchLevels: 99, treasures: 7 }],
 ]
 for (const [label, part] of probes) {
   const b = totalBonus({ ...ZERO, ...part })
@@ -145,8 +148,8 @@ console.log(
 )
 
 console.log('\n【不可回退】累计只往上加，已达成的一条不该在下一步又锁回去')
-const LOW = { ...ZERO, pillLevels: { danLu: 13, huoHou: 18, danFang: 35 }, pulls: 150, jindan: 3, qiLog10: 33, explores: 30, spirits: Object.fromEntries(SPIRITS.map((s) => [s.id, 20])) }
-const HIGH = { ...LOW, pillLevels: { danLu: 30, huoHou: 30, danFang: 40 }, pulls: 900, jindan: 12, insightEarned: 400 }
+const LOW = { ...ZERO, pillLevels: { danLu: 13, huoHou: 18, danFang: 35 }, pulls: 150, jindan: 3, qiLog10: 33, explores: 30, spirits: Object.fromEntries(SPIRITS.map((s) => [s.id, 20])), rootLevels: 40, benchLevels: 24, treasures: 3 }
+const HIGH = { ...LOW, pillLevels: { danLu: 30, huoHou: 30, danFang: 40 }, pulls: 900, jindan: 12, insightEarned: 400, rootLevels: 80, benchLevels: 60, treasures: 7 }
 let regress = []
 for (const def of CHALLENGES) {
   if (challengeUnlocked(def, LOW) && !challengeUnlocked(def, HIGH)) regress.push(`挑战 ${def.name}`)
@@ -181,5 +184,5 @@ for (const def of JINDAN_MILESTONES) {
 const clean = totalBonus(ZERO)
 console.log(`\n  空账上一档都不该生效：${clean.danAdd === 0 && clean.qiAdd === 0 && clean.energyAdd === 0 && clean.dregMul === 1 && clean.passMul === 1 ? '✓' : '✗ 有白给没门槛就咬合了'}`)
 console.log(`  和 noBonus() 同一本起点账：${JSON.stringify(clean) === JSON.stringify(noBonus()) ? '✓' : '✗'}`)
-console.log(`  成就那九条：${ACHIEVEMENTS.filter((d) => d.bonus).map((d) => `${d.name}[${d.metric} ${d.need}] ${d.desc}`).join(' · ')}`)
+console.log(`  加属性成就那 ${ACHIEVEMENTS.filter((d) => d.bonus).length} 条：${ACHIEVEMENTS.filter((d) => d.bonus).map((d) => `${d.name}[${d.metric} ${d.need}] ${d.desc}`).join(' · ')}`)
 console.log(`  挑战在高构筑那本的刻度：${CHALLENGES.map((d) => `${d.name} ${JSON.stringify(challengeMark(d.need, HIGH))}`).join(' · ')}`)

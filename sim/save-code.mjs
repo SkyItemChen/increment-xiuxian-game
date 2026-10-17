@@ -11,6 +11,8 @@ state.settings.autoBuyPill = true
 state.dan = new BigNumber(7.25, 19)
 state.pillLevels = { danLu: 12, huoHou: 9, danFang: 3 }
 state.jindan = 2
+// v16：丹纹四枝等级 [32]。第 2 层带里程碑一共 6 点，两枝各 2 级正好花完
+state.jindanTree = { danDao: 2, fanYuan: 2 }
 state.pillAnchor = 24.3718
 // v12：筑基点零头 [27]，加上根骨/鉴宝台两颗代买开关（偏好位标 8 与 16）
 state.loopBanked = 0.3742
@@ -18,10 +20,13 @@ state.settings.autoBuyRebirth = true
 state.settings.autoBuyExplore = true
 // v13：废渣 [28]、抽数 [29]、精神等级表 [30]、火候档位 [31]，加上代抽开关（偏好位标 32）
 state.dreg = new BigNumber(3.5, 17)
-state.pulls = 41
+state.pulls = 50
 state.spirits = { wuHuo: 6, shouYi: 2, minShou: 2, dingXi: 9 }
 state.pillMode = 'wild'
 state.settings.autoBuyPull = true
+// v14：自动化开关只有在对应成就达成后才会保留，先把根骨与鉴宝台的门槛摆齐
+state.rebirth = { daoJi: 40 }
+state.exploreLevels = { yanLi: 24 }
 
 state.totalTime = 45296
 const code = exportSave()
@@ -42,10 +47,20 @@ console.log(
   state.settings.autoBuyRebirth, state.settings.autoBuyExplore, state.settings.autoBuyPull,
   '· 零头', state.loopBanked,
 )
+const allOn = [
+  state.settings.autoBuyCultivate, state.settings.autoBuyPill, state.settings.autoBuyRebirth,
+  state.settings.autoBuyExplore, state.settings.autoBuyPull,
+].every(Boolean)
+console.log('  v14 同档开关原样保留 =', allOn)
 console.log(
   '丹炉那几栏：丹', state.dan.format(2), '· 炉子', state.pillLevels.danLu,
   '· 火候', state.pillLevels.huoHou, '· 丹房', state.pillLevels.danFang,
   '· 结丹', state.jindan, '层 · 锚', state.pillAnchor,
+)
+console.log(
+  '丹纹那几枝：丹道', state.jindanTree.danDao, '级 · 返元', state.jindanTree.fanYuan,
+  '级 · 识海', state.jindanTree.shiHai ?? 0, '级 · 炉火', state.jindanTree.luHuo ?? 0,
+  '级',
 )
 console.log(
   '凝练那几栏：废渣', state.dreg.format(2), '· 抽过', state.pulls, '次 · 武火', state.spirits.wuHuo,
@@ -59,6 +74,7 @@ console.log('字段总数', table.length, '· 版本', table[0])
 for (const [i, want] of [
   [1, '灵气'], [23, '丹'], [24, '结丹层数'], [25, '定价锚'], [26, '丹炉等级表'], [27, '筑基点零头'],
   [28, '废渣'], [29, '抽过的次数'], [30, '丹道精神等级表'], [31, '火候档位'],
+  [32, '丹纹四枝等级表'],
 ]) {
   const got = table[i]
   const shape = Array.isArray(got) ? `数组长 ${got.length}` : typeof got === 'number' ? '数' : typeof got
@@ -67,7 +83,7 @@ for (const [i, want] of [
 
 // 老存档少几栏也要读得动：v11 的码贴回来，零头与凝练那四栏全按"没有"处理
 const old = JSON.parse(atob(code))
-old.splice(27, 5)
+old.splice(27, 6)
 old[0] = 11
 state.loopBanked = 9
 state.points = 0
@@ -81,7 +97,7 @@ console.log(
 
 // v12 的码只缺凝练那四栏，零头该照样读回来
 const v12 = JSON.parse(atob(code))
-v12.splice(28, 4)
+v12.splice(28, 5)
 v12[0] = 12
 state.loopBanked = 0
 state.pulls = 7
@@ -89,6 +105,55 @@ state.pillMode = 'serene'
 console.log(
   'v12 老码：', importSave(JSON.stringify(v12)), '· 零头', state.loopBanked,
   '· 抽数归', state.pulls, '· 档改回', state.pillMode, '· 丹房', state.pillLevels.danFang,
+)
+
+// v13 老码：字段全在，但五颗自动化开关一次性归零（哪怕门槛已经达到）
+const v13 = JSON.parse(atob(code))
+v13.splice(32, 1)
+v13[0] = 13
+console.log(
+  'v13 老码：', importSave(JSON.stringify(v13)),
+  '· 五颗开关全关 =',
+  [
+    state.settings.autoBuyCultivate, state.settings.autoBuyPill, state.settings.autoBuyRebirth,
+    state.settings.autoBuyExplore, state.settings.autoBuyPull,
+  ].every((on) => on === false),
+)
+
+// v15 老码没有 [32]：丹纹四枝按"没点过"读进来，结丹层数照旧
+const v15 = JSON.parse(atob(code))
+v15.splice(32, 1)
+v15[0] = 15
+state.jindanTree = { danDao: 3 }
+console.log(
+  'v15 老码：', importSave(JSON.stringify(v15)),
+  '· 结丹', state.jindan, '层 · 丹纹归空 =', Object.keys(state.jindanTree).length === 0,
+)
+
+// 改过的档把四枝全写成满级、点数却不够：整棵清掉，别让它白拿加成
+const badTree = JSON.parse(atob(code))
+badTree[32] = [22, 22, 22, 22]
+state.jindanTree = {}
+console.log(
+  '改过的丹纹：', importSave(JSON.stringify(badTree)),
+  '· 整棵清空 =', Object.keys(state.jindanTree).length === 0,
+)
+
+// v14 的码（用户实际导出的那种）：根骨 36、鉴宝台 12、位标 27，门槛没到但三颗开着
+const v14 = JSON.parse(atob(code))
+v14.splice(32, 1)
+v14[0] = 14
+v14[18] = 27
+v14[7] = 399
+v14[15] = [8, 7, 7, 7, 7]
+v14[17] = [3, 3, 3, 3]
+console.log(
+  'v14 老码：', importSave(JSON.stringify(v14)),
+  '· 五颗开关全关 =',
+  [
+    state.settings.autoBuyCultivate, state.settings.autoBuyPill, state.settings.autoBuyRebirth,
+    state.settings.autoBuyExplore, state.settings.autoBuyPull,
+  ].every((on) => on === false),
 )
 
 // 落地成文件常被按 76 字符换行，粘回来还该认得

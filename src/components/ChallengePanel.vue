@@ -60,7 +60,10 @@ function percent(row: ChallengeRow): number {
               第 {{ row.def.layer }} 层
               <span class="mark">{{ row.unlocked ? '已 圆 满' : row.progress }}</span>
             </p>
-            <p class="gain">结到这一层：{{ row.def.reward }}</p>
+            <p class="gain">
+              结到这一层：{{ row.def.reward }}
+              <span v-if="row.def.marks" class="marks">另得丹纹 {{ row.def.marks }} 点</span>
+            </p>
           </div>
         </li>
       </ul>
@@ -215,6 +218,16 @@ function percent(row: ChallengeRow): number {
   letter-spacing: 0.5px;
   color: var(--accent-deep);
   line-height: 1.6;
+}
+
+/* 里程碑另发的那几点丹纹：和奖励同一行，但要认得出是另一笔账 */
+.marks {
+  margin-left: 8px;
+  padding: 1px 7px;
+  border: 1px solid var(--accent-line);
+  border-radius: 7px;
+  font-size: 11px;
+  white-space: nowrap;
 }
 
 .bar {

@@ -1,5 +1,5 @@
 // 扫"高段涨幅"这一个旋钮：三条乘法类法门在 at 级之后换成多陡的涨价，值多少年。
-// 中段（10/10/12 级起把 20/15/12 降到 6/5/4）保持不动，因为它已经验过不动 40 分钟锚点。
+// 中段（10/10/12 级起把 20/15/12 降到 6/5/4）保持不动，因为它已经验过不动 20 分钟锚点。
 // 用法：node --import ./sim/ts-hook.mjs sim/segment-scan.mjs [目标数量级=36]
 import { LIANQI_UPGRADES } from '../src/game/词条与属性.ts'
 import { bareMods, runLife, dur } from './life-engine.mjs'
@@ -24,7 +24,7 @@ function withHigh(highAt, highGrowth) {
 const TARGET_LOG = Number(process.argv[2] ?? 36)
 const targets = [10, 20, 30, TARGET_LOG]
 
-console.log(`空树空宝、一世挂到 1e${TARGET_LOG}；第一段照旧（40.2 分摸到 1e10）\n`)
+console.log(`空树空宝、一世挂到 1e${TARGET_LOG}；第一段照旧（20.2 分摸到 1e10）\n`)
 console.log('高段起点  高段涨幅  ' + targets.map((d) => `1e${d}`.padStart(10)).join('') + '   末尾法门(凝气/聚灵/周天)')
 
 const baseline = runLife({ mods: bareMods(), target: 10 ** TARGET_LOG, items: withHigh(null, 0) })

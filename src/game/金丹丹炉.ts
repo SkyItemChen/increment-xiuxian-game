@@ -1,6 +1,8 @@
 import { BigNumber } from './BigNumber'
 import {
-  JIEDAN_RETURN_PER,
+  JIEDAN_FIRST_MULT,
+  JIEDAN_LAYER_CAP,
+  JIEDAN_RETURN_GROWTH,
   PILL_ANCHOR_SECONDS,
   PILL_CONVERT_BASE,
   PILL_LINES,
@@ -56,11 +58,12 @@ export function pillQiAdd(levels: Record<string, number>): number {
 }
 
 /**
- * 结丹 n 层给的回溯倍率。它和道基、淬炼共用同一条**全部灵气产出**的加法轴——
- * 挂在这条轴上才拿得到"一世时长严格除以 (1 + 层数)"那条性质，因为它乘在整份产出上。
+ * 结丹 n 层给的回溯倍率：首层 ×2，之后每层 ×1.25。
+ * 它乘在整份灵气产出上，所以第 k 世（已结 k 层）的时长大约被它除掉——乘法轴才追得上 1e100。
  */
 export function jindanReturnMult(n: number): number {
-  return 1 + JIEDAN_RETURN_PER * Math.max(0, Math.floor(n))
+  const layer = Math.min(JIEDAN_LAYER_CAP, Math.max(0, Math.floor(n)))
+  return layer === 0 ? 1 : JIEDAN_FIRST_MULT * JIEDAN_RETURN_GROWTH ** (layer - 1)
 }
 
 /**

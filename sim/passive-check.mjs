@@ -1,12 +1,13 @@
 // 金丹开张之后：练气不再破境，改为每秒按累计灵气折给筑基点。
 // 这里量四件事——每秒到底折给多少、会不会变成复利滚雪球、破境那颗按钮是不是真关死了、
-// 结丹三层这个门槛要挂多久。全部走运行时函数，不在这里另立一份价目表。
+// 结丹前几层这个门槛要挂多久。全部走运行时函数，不在这里另立一份价目表。
 // 用法：node --import ./sim/ts-hook.mjs sim/passive-check.mjs
 import { BigNumber } from '../src/game/BigNumber.ts'
-import { POINT_PASS_RATE, JIEDAN_AUTO_UNLOCK_LAYERS, REBIRTH_TREE, EXPLORE_TREE, TREASURES } from '../src/game/词条与属性.ts'
+import { POINT_PASS_RATE, ROOT_AUTO_UNLOCK_LEVELS, BENCH_AUTO_UNLOCK_LEVELS, REBIRTH_TREE, EXPLORE_TREE, TREASURES } from '../src/game/词条与属性.ts'
 import { REALMS } from '../src/game/realms.ts'
 import { rebirthCost } from '../src/game/rebirth.ts'
 import { exploreCost, NO_EXPLORE_MODS } from '../src/game/explore.ts'
+import { jindanReturnMult } from '../src/game/金丹丹炉.ts'
 import {
   state, pointLump, pointPassPerSecond, settlePointPass, realmToBreakThrough, pillUnlocked, recompute,
 } from '../src/game/state.ts'
@@ -45,7 +46,17 @@ function lastReadableLv(costOf) {
   return lv
 }
 
-console.log(`折给比例 ${POINT_PASS_RATE * 100}% · 结丹 ${JIEDAN_AUTO_UNLOCK_LAYERS} 层解锁代买 · 筑基门槛 1e10，金丹门槛 1e${JINDAN_LOG}`)
+/** 结丹 n 层后的累计世数：首层 ×2、之后每层 ×1.25，一世时长按倍率除 */
+function layerSpan(k) {
+  let s = 0
+  for (let i = 0; i < k; i++) s += 1 / jindanReturnMult(i)
+  return s
+}
+
+console.log(
+  `折给比例 ${POINT_PASS_RATE * 100}% · 根骨 ${ROOT_AUTO_UNLOCK_LEVELS} 级 / 鉴宝台 ${BENCH_AUTO_UNLOCK_LEVELS} 级解锁代买` +
+    ` · 筑基门槛 1e10，金丹门槛 1e${JINDAN_LOG}`,
+)
 console.log('小知识留的口子在这儿：比例只有 POINT_PASS_RATE 这一个数，后续词条要改就改它。')
 
 /* ------------------------------------------------------ 每秒折给多少 */
@@ -128,7 +139,7 @@ console.log(
 
 /* ---------------------------------------------------------- 护栏四 */
 
-console.log(`\n【护栏四 · 结丹 ${JIEDAN_AUTO_UNLOCK_LAYERS} 层要挂多久】门槛 = 丹炉 Lv.12 + 灵气 1e${JINDAN_LOG} 存量`)
+console.log(`\n【护栏四 · 结丹前三层要挂多久】门槛 = 丹炉 Lv.12 + 灵气 1e${JINDAN_LOG} 存量`)
 const TRE = Object.fromEntries(TREASURES.map((t) => [t.id, t.cap]))
 const END_LOG = JINDAN_LOG
 const LAYERS = [1, 2, 3, 6, 12]
@@ -151,15 +162,15 @@ for (const [stageName, rebirth] of STAGES) {
   runs.push({ stageName, T: r.t, lump, rate })
   console.log(`  ${stageName} · 一世挂到 1e${END_LOG} 要 ${dur(r.t)} → 手动破境 ${lump} 点 → 每秒折给 ${rate.toFixed(2)} 点`)
   for (const k of LAYERS) {
-    // 每结一层回溯 +100%，下一世时长严格除以 (1+n)：第 n 层累计 = r.t ×(2 − 2^(1−n))
-    console.log(`    到第 ${String(k).padStart(2)} 层：累计 ${dur(r.t * (2 - 2 ** (1 - k)))}`)
+    // 首层 ×2、之后每层 ×1.25：第 k 层累计 = r.t × Σ 1/jindanReturnMult(i)
+    console.log(`    到第 ${String(k).padStart(2)} 层：累计 ${dur(r.t * layerSpan(k))}`)
   }
 }
 console.log(
   '  注：第一行是"金丹存量门槛过了但法宝一条没收"的路，1166 年——结丹事实上要求先把法宝收齐；' +
     '丹炉链（定标档挂 12 小时过 Lv.12）与攒这一世灵气并行挂，所以常态路线（第二行）的第一层比它短。',
 )
-console.log('     三层就是"在金丹这条链上走过三遭"，一天半的账，不是又要挂三年。')
+console.log('     三层就是"在金丹这条链上走过三遭"，一天的账，不是又要挂三年。')
 
 /* -------------------------------------------------- 对照·旧流程给多少 */
 
@@ -197,7 +208,7 @@ console.log(
 )
 const toLv6 = Array.from({ length: 6 }, (_, lv) => exploreCost(lv)).reduce((a, b) => a + b, 0) * EXPLORE_TREE.length
 console.log(
-  `  鉴宝台四条线从零各买到 Lv.6 一共 ${toLv6} 点，而灵气 1e60 时一天进项就有 ${dayIn} 点：` +
-    `代买免掉的正是"每天回来把这四条再点一遍"这种重复点击`,
+  `  鉴宝台四条线从零各买到 Lv.6（合计 ${BENCH_AUTO_UNLOCK_LEVELS} 级，正好是代买门槛）一共 ${toLv6} 点，` +
+    `而灵气 1e60 时一天进项就有 ${dayIn} 点：代买免掉的正是"每天回来把这四条再点一遍"这种重复点击`,
 )
 console.log('  押注那一下没动：把筑基点全压上去抽一铲仍是人手按的，结丹和探索两个门槛照旧要玩家自己走过去')

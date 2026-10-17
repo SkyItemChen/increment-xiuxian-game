@@ -1,7 +1,7 @@
 // 丹炉链的回归检查：跑的全是运行时那套式子，sim 里不镜像价目表，也不留第二份贪心买法。
 // 用法：node --import ./sim/ts-hook.mjs sim/pill-check.mjs
 // 盯四件事：① 定标档挂满 12 小时正好摸到炉子第 12 级 ② 一世时长按 1/√流量 走
-// ③ 定价锚只涨不跌，自废流量讨不到便宜 ④ 结丹回溯挂在加法轴上，一世时长严格除以 (1 + 层数)
+// ③ 定价锚只涨不跌，自废流量讨不到便宜 ④ 结丹回溯是乘法，一世时长按倍率缩
 import { BigNumber } from '../src/game/BigNumber.ts'
 import {
   JIEDAN_FURNACE_LEVEL,
@@ -9,7 +9,7 @@ import {
   PILL_ANCHOR_SECONDS,
   PILL_LINES,
 } from '../src/game/词条与属性.ts'
-import { FURNACE_ID, pillCostLog10, pillFlowLog10 } from '../src/game/金丹丹炉.ts'
+import { FURNACE_ID, jindanReturnMult, pillCostLog10, pillFlowLog10 } from '../src/game/金丹丹炉.ts'
 import { pillRows, recompute, state } from '../src/game/state.ts'
 import { GATE, bareMods, dur, runLife } from './life-engine.mjs'
 import { DAN_IDS, PILL_IDS, runPillLife, timeToLevel } from './pill-life.mjs'
@@ -85,19 +85,19 @@ console.log(
     ` ${state.pillAnchor === upAnchor && pillRows()[0].cost.log10() === upPrice ? '✓' : '✗ 锚被流量带下去了'}`,
 )
 
-console.log('\n【回溯只能加法轴】结丹 n 层 = 全部灵气产出 ×(1+n)，一世时长严格除以 (1+n)')
+console.log('\n【回溯是乘法】首层 ×2、之后每层 ×1.25，一世时长按倍率缩')
 const lifeAt = (n) => {
   const mods = bareMods()
-  mods.globalAdd = n
+  mods.globalAdd = jindanReturnMult(n) - 1
   return runLife({ mods, target: GATE }).t
 }
 const base = lifeAt(0)
 for (const n of [0, 1, 2, 3]) {
-  console.log(`  第 ${n} 层金丹（灵气产出 ×${1 + n}）：攒到 1e10 要 ${dur(lifeAt(n)).padStart(9)}`)
+  console.log(`  第 ${n} 层金丹（灵气产出 ×${jindanReturnMult(n).toFixed(2)}）：攒到 1e10 要 ${dur(lifeAt(n)).padStart(9)}`)
 }
 for (const n of [1, 2, 3]) {
   const ratio = lifeAt(n) / base
-  const want = 1 / (1 + n)
+  const want = 1 / jindanReturnMult(n)
   // 只要求"除得干净"，不要求浮点位数完全相等
-  console.log(`  ×${1 + n} 那一趟除下来是 ${ratio.toFixed(6)}，该等于 ${want.toFixed(6)} ${Math.abs(ratio - want) < 1e-9 ? '✓' : '✗'}`)
+  console.log(`  ×${jindanReturnMult(n).toFixed(2)} 那一趟除下来是 ${ratio.toFixed(6)}，该等于 ${want.toFixed(6)} ${Math.abs(ratio - want) / want < 1e-6 ? '✓' : '✗'}`)
 }

@@ -15,7 +15,7 @@ import type { NumberStyle } from './BigNumber'
  *          结丹散去的还是修行那一层（2026-10-16 接的运行时，算式在 `金丹丹炉.ts` 与 `凝练.ts`，定标在 `sim/jindan-anchor.mjs`）；
  *   元婴及以后 = 界面还没做，只按"每一境都得新开一条链"排着阈值（见下）。
  *
- * 转生线（修行境攒够灵气就能破境，可以反复）：筑基 1e10 —— 实测练气一世 40.3 分钟，终局约 2.7e7 灵气/秒。
+ * 转生线（修行境攒够灵气就能破境，可以反复）：筑基 1e10 —— 空树一世 20.2 分钟。
  *   金丹一开张这条线就改成按秒折算：破境那颗按钮不再摆，破境本该给的点数每秒给玩家一成（文末 POINT_PASS_RATE）。
  * 筑基点按"这一世比门槛多攒出几个数量级"线性结算：一个数量级 **3 点**，摸到门槛就破给 2 点，
  * 每破一次境再折算 0.25 个数量级（8 世封顶），所以一世比一世厚（公式在 `rebirth.ts`）。
@@ -29,7 +29,7 @@ import type { NumberStyle } from './BigNumber'
  *   先天根基 = 起手那份 1 灵气/秒，**不再按第几世翻**（2026-10-15 用户拍板：一世 ×100 太夸张）。
  *   它的作用只剩"没参悟法门也有进项"，来世变快靠的是根骨树买出来的倍率。
  *
- * 法门**没有等级上限**，墙由价格竖起来：乘法类每级涨价 12~20 倍、单级收益只给 ×1.5~×2，
+ * 法门**没有等级上限**，墙由价格竖起来：乘法类每级涨价 12~20 倍、单级收益只给 ×1.52~×2.02，
  * 于是下一级要攒的时间每级翻 3~5 倍，不转生根本买不起。
  *
  * 「全局速度」不是法门词条，是设置里的调试倍率（`state.settings.globalSpeed`）：
@@ -100,33 +100,33 @@ export interface UpgradeDef {
  * 2026-10-16 加了 `segments`：同一条法门的 g 允许按等级区间换档，墙从"一堵"变成"几段"。
  * 三条乘法类的中段松一档（g 换成 4 / 6 / 5，E 抬到 .124 / .386 / .270，合计 .78），高段把 g 换回
  * 原值，拐点统一摆在 30 级。低段拐点 10/10/12 与高段拐点 30 都落在"一世摸到 1e10 时才 7/6/8 级"
- * 之外，所以 40 分钟这个锚点一点没动（实测仍是 40.2 分）。
+ * 之外，所以空树一世 20 分钟这个锚点没被分段碰到（实测 20.2 分）。
  * 两条加法类（吐纳引气、紫府开辟）不加段：它们的 E 本来就是 0，墙不在它们身上。
  *
  * 实测（空树空宝、一世挂到底，`node --import ./sim/ts-hook.mjs sim/e36.mjs a`）：
- * 1e10 · 40 分 / 1e20 · 1.5 年 / 1e26 · 79 年 / 1e30 · 1181 年 / 1e33 · 4 万年 / 1e36 · 160 万年。
- * 对比一路不分段：1e20 要 20.9 年、1e36 要 200 亿年。**分段买到的不是把墙拆掉，是把悬崖改成斜坡**——
+ * 1e10 · 20 分 / 1e20 · 198 天 / 1e26 · 21 年 / 1e30 · 268 年 / 1e33 · 8408 年 / 1e36 · 30 万年。
+ * 对比一路不分段：1e20 要 10.4 年、1e36 要 100 亿年。**分段买到的不是把墙拆掉，是把悬崖改成斜坡**——
  * 中量级便宜了一个数量级还多，30 级以后每个数量级的等待重新按 2~3 倍递增。
  * 高段拐点必须落在玩家真会走到的等级里：早先摆在 50/60 级，一世最多到 47/38/40 级，那段完全咬不到，
  * 结果只剩中段的软化，1e36 从 200 亿年塌到 5.85 万年。扫参见 `sim/segment-scan.mjs`。
  *
- * 定下的节奏（贪心买入模拟）：一世 40 分钟摸到 1e10，全程约 88 次参悟。
+ * 定下的节奏（贪心买入模拟）：空树一世 20 分钟摸到 1e10，全程约 82 次参悟。
  */
 export const LIANQI_UPGRADES: UpgradeDef[] = [
-  { id: 'lianqi_tuNa', name: '吐纳引气', kind: 'auto-base', base: 10, growth: 1.55, power: 6 },
+  { id: 'lianqi_tuNa', name: '吐纳引气', kind: 'auto-base', base: 10, growth: 1.55, power: 10 },
   {
-    id: 'lianqi_ningQi', name: '凝气成珠', effect: '每级吐纳速度 +8%，进度条走得更快', kind: 'speed-mult',
-    base: 150, growth: 12, power: 1.08, segments: [{ at: 12, growth: 4 }, { at: 30, growth: 12 }],
+    id: 'lianqi_ningQi', name: '凝气成珠', effect: '每级吐纳速度 +9%，进度条走得更快', kind: 'speed-mult',
+    base: 150, growth: 12, power: 1.09, segments: [{ at: 12, growth: 4 }, { at: 30, growth: 12 }],
   },
   {
     id: 'lianqi_juLing', name: '聚灵阵眼', effect: '每级让吐纳引气、紫府开辟的效果翻倍', kind: 'auto-power',
-    base: 60, growth: 20, power: 2, segments: [{ at: 10, growth: 6 }, { at: 30, growth: 20 }],
+    base: 60, growth: 20, power: 2.02, segments: [{ at: 10, growth: 6 }, { at: 30, growth: 20 }],
   },
   {
-    id: 'lianqi_zhouTian', name: '周天运转', effect: '每级灵气/秒 +50%', kind: 'auto-mult',
-    base: 3e3, growth: 15, power: 1.5, segments: [{ at: 10, growth: 5 }, { at: 30, growth: 15 }],
+    id: 'lianqi_zhouTian', name: '周天运转', effect: '每级灵气/秒 +52%', kind: 'auto-mult',
+    base: 3e3, growth: 15, power: 1.52, segments: [{ at: 10, growth: 5 }, { at: 30, growth: 15 }],
   },
-  { id: 'lianqi_ziFu', name: '紫府开辟', kind: 'auto-base', base: 2e4, growth: 3, power: 1500 },
+  { id: 'lianqi_ziFu', name: '紫府开辟', kind: 'auto-base', base: 2e4, growth: 3, power: 2500 },
 ]
 
 /**
@@ -194,8 +194,8 @@ export function upgradeCurrent(
  *  - crit-add    每级给 power 的机会让一次吐纳收益 ×GATHER_CRIT_MULT，和紫金葫芦共用一个概率池
  *  - point-add   每次破境多给 power×等级 个筑基点，和混沌钟同一笔账
  *
- * 五条在一世时长上都量过（空树一世 40.3 分）：灵根 Lv.1 → 26.9、道基 Lv.1 → 33.6、
- * 慧根 Lv.1 → 38.0、悟性 Lv.1 → 38.3，第一条点下去就有明显反馈。
+ * 五条在一世时长上都量过（空树一世 20.2 分）：灵根 Lv.1 → 13.5 分、道基 Lv.1 → 16.9 分、
+ * 慧根 Lv.1 → 18.3 分、悟性 Lv.1 → 19.1 分，第一条点下去就有明显反馈。
  */
 export type RebirthKind = 'global-add' | 'output-add' | 'cost-cut' | 'crit-add' | 'point-add'
 
@@ -215,10 +215,10 @@ export interface RebirthDef {
  * 按 ×1.5/级 递增，永远点不满也永远 runaway 不起来。
  */
 export const REBIRTH_TREE: RebirthDef[] = [
-  { id: 'daoJi', name: '道基', effect: '每级 +20% 全部灵气产出', kind: 'global-add', power: 0.2 },
-  { id: 'lingGen', name: '灵根', effect: '每级 +50% 法门灵气/秒', kind: 'output-add', power: 0.5 },
-  { id: 'wuXing', name: '悟性', effect: '每级让法门涨价幅度少涨 2%', kind: 'cost-cut', power: 0.02 },
-  { id: 'huiGen', name: '慧根', effect: '每级 +5% 机会让一次吐纳收益 ×3', kind: 'crit-add', power: 0.05 },
+  { id: 'daoJi', name: '道基', effect: '每级 +22% 全部灵气产出', kind: 'global-add', power: 0.22 },
+  { id: 'lingGen', name: '灵根', effect: '每级 +55% 法门灵气/秒', kind: 'output-add', power: 0.55 },
+  { id: 'wuXing', name: '悟性', effect: '每级让法门涨价幅度少涨 2.2%', kind: 'cost-cut', power: 0.022 },
+  { id: 'huiGen', name: '慧根', effect: '每级 +5.5% 机会让一次吐纳收益 ×3', kind: 'crit-add', power: 0.055 },
   { id: 'yuanFa', name: '缘法', effect: '每级让筑基点进项多 1 点', kind: 'point-add', power: 1 },
 ]
 
@@ -401,8 +401,8 @@ export function treasureCurrent(
 }
 
 /**
- * 挑战、里程碑、成就这三张表共用的"白给好处"的形状——**只有这五条轴**，
- * 每条都是链上现成的加数或乘数，新玩法不许另起第六条：
+ * 挑战、里程碑、成就这三张表共用的"白给好处"的形状。当前有这五条轴，
+ * 每条都是链上现成的加数或乘数；新玩法可以继续加轴，但必须按 AGENTS.md §4.2 接进统一聚合：
  *  - danAdd    添在 `凝练.ts` 的 `danYieldMult` 那同一个加数上，等于武火那种"每一炉多炼几成丹"
  *  - qiAdd     加进丹房那条灵气返哺加法轴（和丹房、通灵共用一个加数，一起被 √定价吃回去）
  *  - energyAdd 加进道基/淬炼/结丹那条全部产出加法轴
@@ -440,12 +440,11 @@ export function addBonus(sum: Bonus, add: Bonus): Bonus {
  * 所以解锁一次就一直开着，不会把已经交给系统代跑的活又收回来。
  * realm 记这条成就算在哪一境头上，成就页照它从上往下排——练气的在前，金丹的在后。
  *
- * 头六条成就是"解锁自动化"那一类，好处长在 `state.ts` 的门槛函数上，所以不带 bonus；
- * 后九条是加属性的，bonus 走下面 `Bonus` 那五条现成的轴，达成之后被动生效、没有领取那一步。
- * 这九条的好处**在金丹开张之前一律不咬合**（出丹、废渣、按秒折点这三样本来就只有金丹之后才有账），
- * 所以练气那 40 分钟的锚点一条都碰不着；门槛也全摆在金丹这条链上能看到的那几笔累计里。
- * 九条好处分两档：前四条是"头一遍走完这条链"的，后五条是链条上再深一截的，
- * 五条轴一条不落各补一笔，所以没有哪条轴只有挑战和里程碑在撑。
+ * 头七条成就是"解锁自动化/便利"那一类，好处长在 `state.ts` 的门槛函数上，所以不带 bonus；
+ * 后十四条是加属性的，bonus 走下面 `Bonus` 那五条现成的轴，达成之后被动生效、没有领取那一步。
+ * 筑基那五条只给 `passMul`：按秒折点要等金丹之后才开张，所以它们**碰不着练气与筑基的锚**，
+ * 只是把往后每秒折进来的筑基点垫厚一点。金丹那九条的好处也一律在金丹开张之后才咬合，
+ * 所以练气那一世（空树一世 20 分钟）的锚点一条都碰不着。
  */
 export interface AchievementDef {
   id: string
@@ -460,8 +459,22 @@ export interface AchievementDef {
   bonus?: Bonus
 }
 
-/** 成就的进度来源；layers 看已结成的金丹层数，只涨不跌；qi 看累计灵气到过多少；turns 看累计转过多少次凝练；explores 看累计押过多少次铲 */
-export type AchievementMetric = 'points' | 'insight' | 'layers' | 'qi' | 'turns' | 'explores'
+/**
+ * 成就的进度来源；全都只涨不跌：
+ * points 累计筑基点、insight 累计见识、explores 累计押铲次数、
+ * root 根骨五条合计等级、bench 鉴宝台四条合计等级、treasures 已收法宝件数、
+ * layers 已结丹层数、qi 累计灵气到过多少、turns 累计转过多少次凝练。
+ */
+export type AchievementMetric =
+  | 'points'
+  | 'insight'
+  | 'explores'
+  | 'root'
+  | 'bench'
+  | 'treasures'
+  | 'layers'
+  | 'qi'
+  | 'turns'
 
 /** 成就挂在哪一境名下 */
 export type AchievementRealm = '练气' | '筑基' | '金丹'
@@ -506,14 +519,14 @@ export const PILL_AUTO_UNLOCK_LAYERS = 1
 export const PULL_AUTO_UNLOCK_TURNS = 50
 
 /**
- * 结到第几层丹，系统才开始替玩家买根骨与鉴宝台。
- * 这一档不看筑基点、只看层数：金丹那一层的钱（丹）要挂够一整世才攒得出下一层，
- * 层数因此是"玩家真在金丹这条链上走过几遭"的账。摆在三层是量出来的（`sim/passive-check.mjs`）：
- * 第一层丹刚结上手就忙——丹房要起、炉子要往上炼；到第三层时一世只剩原来三分之一长，
- * 筑基点那条线的账（根骨、鉴宝台）已经摊不开点了，正好交给系统。
+ * 根骨与鉴宝台各自的代买门槛，两条分开算。
+ * 根骨看五条合计 40 级（平均每条 8 级，`sim/zhuji-hours.mjs` 里约 3.3 小时摸到），
+ * 鉴宝台看四条合计 24 级（平均每条 6 级，约 116 见识）；都是只涨不跌的永久等级。
+ * 到这一步，两条树买起来已经是纯点手指的活，交给系统不伤玩法；
  * 押探索、结丹这两颗按钮不在这条豁免里，照旧永远手动。
  */
-export const JIEDAN_AUTO_UNLOCK_LAYERS = 3
+export const ROOT_AUTO_UNLOCK_LEVELS = 40
+export const BENCH_AUTO_UNLOCK_LEVELS = 24
 
 /**
  * 闭关（人不在这儿、游戏还在跑）最多补多少秒——按**墙钟**算，不吃全局速度。
@@ -548,7 +561,7 @@ export const BONUS_LAYER_NEED = 12
 /**
  * 第二档那五条加属性成就的门槛：各比同轴的前一条再深一截，五条轴一条不落。
  * 只用层数、累计灵气、累计探索这三笔账——它们都跟着产出一起涨，往后总能摸到，
- * 练气那 40 分钟与结丹那条 12 小时的线也碰不着。
+ * 练气那一世（空树一世 20 分钟）与结丹那条 12 小时的线也碰不着。
  * 独独不再摆累计凝练：转盘价按"见过的最高出丹流量"定标、废渣供给也拿同一把尺涨，两边约掉，
  * 所以 time-to-N 抽几乎与流量无关（实测 150 抽≈12 天、170 抽≈4 个月、260 抽≈数年、400 抽挂满 3e13 秒也到不了）。
  * 头一档里聚沙成塔那条压在 170 抽上，已经是这条墙上人还够得着的最后一格，往后再不往上加抽数门槛。
@@ -575,13 +588,71 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     metric: 'insight',
     realm: '练气',
   },
+  /**
+   * 筑基这七条：五条是里程碑，两条把根骨与鉴宝台的代买拆开。
+   * 里程碑的好处一律只走 `passMul`——按秒折点要等金丹之后才开张，
+   * 所以这些加成碰不着练气那一世和筑基本身的节奏，只把往后的进项垫厚。
+   */
   {
-    id: 'autoBuyTrees',
-    name: '丹成三转',
-    desc: '筑基根骨、鉴宝台自动购买',
-    need: JIEDAN_AUTO_UNLOCK_LAYERS,
-    metric: 'layers',
+    id: 'exploreFirst',
+    name: '初探宝山',
+    desc: '每秒进的筑基点 1.05 倍',
+    need: 5,
+    metric: 'explores',
     realm: '筑基',
+    bonus: { passMul: 1.05 },
+  },
+  {
+    id: 'treasureThree',
+    name: '三宝在身',
+    desc: '每秒进的筑基点 1.08 倍',
+    need: 3,
+    metric: 'treasures',
+    realm: '筑基',
+    bonus: { passMul: 1.08 },
+  },
+  {
+    id: 'autoBuyRebirth',
+    name: '根骨自成',
+    desc: '根骨自动购买',
+    need: ROOT_AUTO_UNLOCK_LEVELS,
+    metric: 'root',
+    realm: '筑基',
+  },
+  {
+    id: 'autoBuyExplore',
+    name: '鉴宝有度',
+    desc: '鉴宝台自动购买',
+    need: BENCH_AUTO_UNLOCK_LEVELS,
+    metric: 'bench',
+    realm: '筑基',
+  },
+  {
+    id: 'insightKeeper',
+    name: '慧眼识珍',
+    desc: '每秒进的筑基点 1.10 倍',
+    need: 200,
+    metric: 'insight',
+    realm: '筑基',
+    bonus: { passMul: 1.1 },
+  },
+  {
+    id: 'pointTycoon',
+    name: '点石成金',
+    desc: '每秒进的筑基点 1.10 倍',
+    need: 1000,
+    metric: 'points',
+    realm: '筑基',
+    bonus: { passMul: 1.1 },
+  },
+  {
+    id: 'treasureAll',
+    name: '七宝俱全',
+    desc: '每秒进的筑基点 1.20 倍',
+    need: 7,
+    metric: 'treasures',
+    realm: '筑基',
+    bonus: { passMul: 1.2 },
   },
   {
     id: 'pointPass',
@@ -608,7 +679,7 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     realm: '金丹',
   },
   /**
-   * 下面九条是加属性的，好处落在那五条现成的轴上，也都碰不着练气那条 40 分钟的锚：
+   * 下面九条是加属性的，好处落在那五条现成的轴上，也都碰不着练气那条锚（空树一世 20 分钟）：
    * 出丹、废渣、按秒折点这三笔账本来就只有金丹开张之后才有。
    * 头四条各读一笔（累计灵气 1e33 / 累计凝练 170 / 累计探索 30 / 结到第 12 层），是头一遍走完这条链；
    * 后五条各再深一截，五条轴一条不落——废渣那一条原本只有挑战和里程碑在给。
@@ -703,6 +774,9 @@ export function metricLabel(metric: AchievementMetric | undefined): string {
   if (metric === 'layers') return '次结丹'
   if (metric === 'turns') return '次凝练'
   if (metric === 'explores') return '次探索'
+  if (metric === 'root') return '级根骨'
+  if (metric === 'bench') return '级鉴宝台'
+  if (metric === 'treasures') return '件法宝'
   return '筑基点'
 }
 
@@ -763,8 +837,16 @@ export const PILL_ANCHOR_SECONDS = 6.977e-9
 /** 结丹线：丹炉第 12 级。定标档（灵气/秒 1e24）挂满 12 小时正好摸到 */
 export const JIEDAN_FURNACE_LEVEL = 12
 
-/** 结丹一层给全部灵气产出的加法额度：+100%/层，和道基、淬炼同一条轴，所以一世时长严格除以 (1 + 层数) */
-export const JIEDAN_RETURN_PER = 1
+/**
+ * 结丹回溯：首层把全部灵气产出 ×2，之后每层再 ×1.25。
+ * 元婴那道 1e100 的门槛只有乘法轴扛得住——道基、丹房、淬炼都是加法，堆不出七十个数量级；
+ * 而每层都 ×2 又太快（两百多层就把整条链压成几分钟），所以首层保留"结丹一次快一倍"的手感，后面换成复利。
+ */
+export const JIEDAN_FIRST_MULT = 2
+/** 第二层起每层乘这个数：×1.25 时约 720 层摸到 1e70 的回溯倍率 */
+export const JIEDAN_RETURN_GROWTH = 1.25
+/** 防 double 溢出的天花板：1.25^999 ≈ 1e97，正常路线摸不到 */
+export const JIEDAN_LAYER_CAP = 1000
 
 /**
  * 金丹开张之后，练气不再破境：每秒按这个比例把筑基点折到玩家账上（1%）。
@@ -781,7 +863,7 @@ export const POINT_PASS_RATE = 0.01
 export const PILL_LINES: PillLineDef[] = [
   { id: 'danLu', name: '丹炉', effect: '一炉催一炉。每级出丹翻一倍', kind: 'dan-mul', power: 2, growth: 30, ratio: 1 },
   { id: 'huoHou', name: '火候', effect: '火头拿捏准。每级多炼出 5% 丹', kind: 'conv-add', power: 0.05, growth: 10, ratio: 3 },
-  { id: 'danFang', name: '丹房', effect: '丹气回哺自身。每级修行 +5%', kind: 'qi-add', power: 0.05, growth: 3, ratio: 9 },
+  { id: 'danFang', name: '丹房', effect: '丹气回哺自身。每级修行 +6%', kind: 'qi-add', power: 0.06, growth: 3, ratio: 9 },
 ]
 
 export function findPill(id: string): PillLineDef | undefined {
@@ -1006,24 +1088,95 @@ export const CHALLENGES: ChallengeDef[] = [
 ]
 
 /**
- * 结丹的里程碑 —— 层数本身已经给"全部灵气产出 ×(1+层数)"那笔大账（`JIEDAN_RETURN_PER`），
+ * 结丹的里程碑 —— 层数本身已经给"首层 ×2、之后每层 ×1.25"那笔大账（`jindanReturnMult`），
  * 这一栏只在几个台阶上再补一笔现成轴上的好处，让每一层不止是"下一世短一截"。
  * 台阶摆得开的理由是层数越往上越费灵气：每一层都要重新把手上的灵气攒回 1e30 那道线，
- * 而下一世的长度严格除以 (1+层数)，所以第 8 层大约只是第 1 层的几分之一那么久。
+ * 而下一世的长度被回溯倍率除掉，所以第 8 层大约只是第 1 层的几分之一那么久。
  */
 export interface MilestoneDef {
   id: string
   /** 已结成第几层丹才算这一档 */
   layer: number
   reward: string
+  /** 这一档另给的丹纹点数。结丹一层本身也给 1 点，见 JINDAN_TREE_PER_LAYER */
+  marks?: number
   bonus: Bonus
 }
 
+/**
+ * 五条结丹里程碑。丹纹点数摆在最前面那几层，是给前 20 层一点可点的东西：
+ * 按 `sim/jindan-tree.mjs`，422 点里有约 390 点要到最后半小时才到账，
+ * 光靠每层 1 点的话，走到第 20 层只够点 5 级，先升哪一枝根本看不出来。
+ */
 export const JINDAN_MILESTONES: MilestoneDef[] = [
-  { id: 'msLayer1', layer: 1, reward: '每一炉的丹 +10%', bonus: { danAdd: 0.1 } },
-  { id: 'msLayer2', layer: 2, reward: '炸炉赔的废渣 1.25 倍', bonus: { dregMul: 1.25 } },
-  { id: 'msLayer3', layer: 3, reward: '丹炼回灵气 +15%', bonus: { qiAdd: 0.15 } },
-  { id: 'msLayer5', layer: 5, reward: '灵气产出 +25%', bonus: { energyAdd: 0.25 } },
-  { id: 'msLayer8', layer: 8, reward: '每秒进的筑基点 1.50 倍', bonus: { passMul: 1.5 } },
+  { id: 'msLayer1', layer: 1, reward: '每一炉的丹 +10%', marks: 2, bonus: { danAdd: 0.1 } },
+  { id: 'msLayer2', layer: 2, reward: '炸炉赔的废渣 1.25 倍', marks: 2, bonus: { dregMul: 1.25 } },
+  { id: 'msLayer3', layer: 3, reward: '丹炼回灵气 +15%', marks: 3, bonus: { qiAdd: 0.15 } },
+  { id: 'msLayer5', layer: 5, reward: '灵气产出 +25%', marks: 4, bonus: { energyAdd: 0.25 } },
+  { id: 'msLayer8', layer: 8, reward: '每秒进的筑基点 1.50 倍', marks: 6, bonus: { passMul: 1.5 } },
 ]
+
+/* ------------------------------------------------------------------ 丹纹 */
+
+/** 结丹每层给的丹纹点数。层数只涨不跌，所以它是一笔可以随时回算的累计账 */
+export const JINDAN_TREE_PER_LAYER = 1
+
+/** 四枝各 22 级。第 n 级价 n 点，所以一枝 253 点、四枝 1012 点 */
+export const JINDAN_TREE_MAX = 22
+
+/**
+ * 丹纹四枝。点数只从结丹与结丹里程碑来，怎么点全由玩家决定，不接自动化——
+ * 它是这一层唯一一处"先升哪一枝"的策略，交给系统代点就等于把这一段玩法删掉。
+ *
+ * 四枝都落在现成的轴上（出丹、灵气产出、废渣），识海那一条不碰产出，
+ * 只在每次结丹时多给一笔见识，让"自动获取见识"不跟探索押注绑死。
+ */
+export type JindanTreeKind = 'dan-add' | 'energy-add' | 'insight-add' | 'dreg-add'
+
+export interface JindanTreeDef {
+  id: string
+  name: string
+  effect: string
+  kind: JindanTreeKind
+  power: number
+  cap: number
+}
+
+export const JINDAN_TREE: JindanTreeDef[] = [
+  { id: 'danDao', name: '丹道', effect: '每级 +4% 出丹', kind: 'dan-add', power: 0.04, cap: JINDAN_TREE_MAX },
+  { id: 'fanYuan', name: '返元', effect: '每级 +3% 灵气产出', kind: 'energy-add', power: 0.03, cap: JINDAN_TREE_MAX },
+  { id: 'shiHai', name: '识海', effect: '每五级多攒一点结丹见识', kind: 'insight-add', power: 0.2, cap: JINDAN_TREE_MAX },
+  { id: 'luHuo', name: '炉火', effect: '每级 +6% 废渣', kind: 'dreg-add', power: 0.06, cap: JINDAN_TREE_MAX },
+]
+
+export function findJindanTree(id: string): JindanTreeDef | undefined {
+  return JINDAN_TREE.find((d) => d.id === id)
+}
+
+/** 从 level 升到 level+1 的价：第 n 级 n 点 */
+export function jindanTreeCost(level: number): number {
+  return level + 1
+}
+
+/** 已经点在树上的总点数；等级先夹回 0..cap，改过的存档也不会把账算穿 */
+export function jindanTreeSpent(levels: Record<string, number>): number {
+  let spent = 0
+  for (const def of JINDAN_TREE) {
+    const lv = Math.min(def.cap, Math.max(0, Math.floor(levels[def.id] ?? 0)))
+    spent += (lv * (lv + 1)) / 2
+  }
+  return spent
+}
+
+/**
+ * 识海那一枝算出来的"每结一层丹给多少见识"。
+ * 底数 1 点是所有玩家都有的；每 5 级再添 1 点，22 级时是 5 点。
+ * 做成整级台阶而不是每级 0.1，是因为见识是整数货币，界面和账本都不该出现 1.1 这种数。
+ */
+export function jindanInsightPerLayer(levels: Record<string, number>): number {
+  const def = JINDAN_TREE.find((d) => d.kind === 'insight-add')
+  if (!def) return JINDAN_TREE_PER_LAYER
+  const lv = Math.min(def.cap, Math.max(0, Math.floor(levels[def.id] ?? 0)))
+  return JINDAN_TREE_PER_LAYER + Math.floor(lv * def.power)
+}
 

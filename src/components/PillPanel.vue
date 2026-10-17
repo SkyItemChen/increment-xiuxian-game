@@ -22,15 +22,17 @@ import {
 import { pillCurrent, PILL_MODES, type PillModeId } from '../game/词条与属性'
 import JindanDialog from './JindanDialog.vue'
 import ChallengePanel from './ChallengePanel.vue'
+import JindanTreePanel from './JindanTreePanel.vue'
 import NinglianPanel from './NinglianPanel.vue'
 
 /**
- * 金丹页 = 丹炉三条线 + 火候三档 + 凝练转盘 + 挑战与结丹里程碑。
+ * 金丹页 = 丹炉三条线 + 火候三档 + 凝练转盘 + 挑战与结丹里程碑 + 丹纹四枝。
  * 灵气进炉出丹，丹买炉子、火候、丹房；炸炉赔出来的废渣抽丹道精神。
  * 炉子炼到第 12 级、手上又攒够那一世灵气，才结得成丹——结丹永远亲手按。
- * 旁边那一栏「挑战」摆的是走过一遍这条链之后白给的好处，被动生效、不用领取。
+ * 旁边那一栏「挑战」摆的是走过一遍这条链之后白给的好处，被动生效、不用领取；
+ * 「丹纹」吃的是结丹层数与里程碑发下的点数，先点哪一枝由玩家自己挑。
  */
-const subTab = ref<'furnace' | 'ninglian' | 'challenge'>('furnace')
+const subTab = ref<'furnace' | 'ninglian' | 'challenge' | 'tree'>('furnace')
 
 const danText = computed(() => fmt(shown.dan))
 const danRateText = computed(() => fmt(state.danPerSecond))
@@ -64,7 +66,7 @@ const lacking = computed(() => Math.max(0, gate.value.need - gate.value.furnace)
 
 const fasterText = computed(() => {
   const n = gate.value.mult - 1
-  return n <= 1 ? '快一倍' : `快 ${n} 倍`
+  return n <= 1 ? '快一倍' : `快 ${fmtNum(n)} 倍`
 })
 
 /** 差几级炉子就说炉子，炉子够了才说灵气——两个门槛别混成一句"还没到" */
@@ -143,10 +145,17 @@ function onConfirmJindan(): void {
         :class="{ on: subTab === 'challenge' }"
         @click="subTab = 'challenge'"
       >挑 战</button>
+      <button
+        type="button"
+        class="sub-tab"
+        :class="{ on: subTab === 'tree' }"
+        @click="subTab = 'tree'"
+      >丹 纹</button>
     </nav>
 
     <NinglianPanel v-if="subTab === 'ninglian'" @back="subTab = 'furnace'" />
     <ChallengePanel v-else-if="subTab === 'challenge'" @back="subTab = 'furnace'" />
+    <JindanTreePanel v-else-if="subTab === 'tree'" @back="subTab = 'furnace'" />
 
     <div v-else class="pill">
       <section class="column core">

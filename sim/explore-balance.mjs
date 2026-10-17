@@ -14,7 +14,7 @@
 // 用法：node --import ./sim/ts-hook.mjs sim/explore-balance.mjs [步长=10,20,40] [世数=4000] [种子]
 import { EXPLORE_TREE, TREASURES } from '../src/game/词条与属性.ts'
 import {
-  EXPLORE_UNLOCK_POINTS, exploreCost, insightOf, luckOf, NO_EXPLORE_MODS, rarityOdds, rollExplore,
+  EXPLORE_UNLOCK_POINTS, exploreCost, insightOf, luckOf, NO_EXPLORE_MODS, openRarities, rarityOdds, rollExplore,
 } from '../src/game/explore.ts'
 import {
   GATE, dur, greedyTree, mergeMods, pointsOf, runLife, treeLevels, treeMods, treasureMods,
@@ -142,7 +142,7 @@ function run(variant, step, policy) {
   }
 
   const em = exploreModsOf()
-  const odds = rarityOdds(em.yanLi, luckOf(treasures, em))
+  const odds = rarityOdds(em.yanLi, luckOf(treasures, em), openRarities(treasures))
   const perShovel = odds.fan * insightOf('fan', em) + odds.ling * insightOf('ling', em) + odds.xian * insightOf('xian', em)
   const end = runLife({ mods: modsOf(), target: 10 ** TARGET_LOG })
   const late = perLife.slice(-200)

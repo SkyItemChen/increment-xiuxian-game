@@ -575,6 +575,7 @@ const playTime = computed(() => {
   font-variant-numeric: tabular-nums;
 }
 
+
 .rate {
   margin: 0;
   font-size: 13px;
