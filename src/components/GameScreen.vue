@@ -118,10 +118,21 @@ const playTime = computed(() => {
     <header class="topbar">
       <div class="brand-block">
         <span class="brand">问道长生</span>
-        <span class="version">v{{ GAME_VERSION }}</span>
-        <button class="changelog-btn" type="button" aria-label="更新日志" @click="emit('openChangelog')">
-          <span class="changelog-icon">☰</span>
-          <span class="changelog-text">日志</span>
+        <!-- 版本号和日志入口合成一颗：右边三道杠就是日志，不再另写"日志"两个字 -->
+        <button
+          class="version-pill"
+          type="button"
+          title="更新日志"
+          aria-label="更新日志"
+          @click="emit('openChangelog')"
+        >
+          <span class="version">v{{ GAME_VERSION }}</span>
+          <span class="pill-divider" aria-hidden="true"></span>
+          <span class="menu-bars" aria-hidden="true">
+            <i></i>
+            <i></i>
+            <i></i>
+          </span>
         </button>
       </div>
       <div class="topbar-right">
@@ -299,51 +310,73 @@ const playTime = computed(() => {
   font-family: var(--font-kai);
 }
 
-/* 品牌后面缀一颗当前版本，跟更新日志页头那颗同一种做法 */
+/* 品牌后面缀一颗当前版本，右边顺带收着日志入口，跟更新日志页头那颗同一种做法 */
 .brand-block {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   gap: 10px;
 }
 
-.version {
-  padding: 2px 8px;
+/* 版本号 + 三道杠合成一颗小标签：整颗可点，和 version 原来的边框样式一脉相承 */
+.version-pill {
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  padding: 3px 8px;
   border: 1px solid var(--accent-line);
   border-radius: 7px;
   background: var(--accent-wash);
   color: var(--accent-deep);
+  line-height: 1;
+  transition: filter 0.15s ease, background 0.15s ease, transform 0.06s ease;
+}
+
+.version-pill:hover {
+  filter: brightness(1.06);
+  border-color: var(--accent);
+}
+
+.version-pill:active {
+  transform: translateY(1px);
+}
+
+/* 键盘走到这里得看得见，不然三道杠太小容易被当成装饰 */
+.version-pill:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.version {
   font-size: 11px;
   letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
 }
 
-/* 版本号右侧的日志按钮：和 version 同一种小标签风格，但可点 */
-.changelog-btn {
-  cursor: pointer;
+/* 版本和杠之间一道细竖线，分得开又不至于断成两块 */
+.pill-divider {
+  flex: none;
+  width: 1px;
+  height: 10px;
+  background: var(--accent-line);
+}
+
+/* 三道杠用三根实心细条画，比字号里的 ☰ 更稳，怎么缩放都一样粗 */
+.menu-bars {
   display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border: 1px solid var(--accent-line);
-  border-radius: 7px;
-  background: var(--surface-flat);
-  color: var(--ink);
-  font-size: 11px;
-  letter-spacing: 1px;
-  transition: filter 0.15s ease, transform 0.06s ease;
+  flex-direction: column;
+  justify-content: space-between;
+  flex: none;
+  width: 12px;
+  height: 9px;
+  opacity: 0.9;
 }
 
-.changelog-btn:hover {
-  filter: brightness(1.08);
-}
-
-.changelog-btn:active {
-  transform: translateY(2px);
-}
-
-.changelog-icon {
-  font-size: 12px;
-  line-height: 1;
+.menu-bars i {
+  display: block;
+  height: 1.5px;
+  border-radius: 1px;
+  background: currentColor;
 }
 
 .topbar-right {
@@ -414,6 +447,7 @@ const playTime = computed(() => {
   display: none;
 }
 
+/* 境界标签用正楷：楷体笔画细、字形显小，字号抬一档才和旁边的小标签等重 */
 .realm-tab {
   flex: none;
   cursor: pointer;
@@ -422,10 +456,12 @@ const playTime = computed(() => {
   border-radius: 999px;
   background: var(--surface-raised);
   color: var(--ink-dim);
-  font-size: 15px;
+  font-family: var(--font-zhengkai);
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.2;
   letter-spacing: 4px;
   text-indent: 4px;
-  font-family: var(--font-kai);
   transition: color 0.2s ease, border-color 0.2s ease, background 0.2s ease;
 }
 
@@ -789,12 +825,13 @@ const playTime = computed(() => {
   text-align: center;
 }
 
+/* 未开境界那颗大字也是境界名，和上面的标签同一种正楷，换页时不至于字体跳一下 */
 .locked-name {
   font-size: 40px;
   letter-spacing: 12px;
   text-indent: 12px;
   color: var(--accent-deep);
-  font-family: var(--font-kai);
+  font-family: var(--font-zhengkai);
 }
 
 .locked-teaser {

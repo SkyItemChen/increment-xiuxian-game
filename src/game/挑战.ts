@@ -46,6 +46,10 @@ export interface BonusCounters {
   treasures: number
   /** 累计灵气到过多少（log10） */
   qiLog10: number
+  /** 累计吐纳次数（练气那一世的勤勉账，存档里本来就有） */
+  gathers: number
+  /** 在线修行了多少分钟（不读 `loops`：那一笔押探索散功会归零，不满足只涨不跌） */
+  playMinutes: number
   /** 丹纹四枝的等级。丹纹是玩家花点数点出来的，不在这三张表的累计账里 */
   jindanTree?: Record<string, number>
 }
@@ -59,6 +63,8 @@ export function metricValue(metric: AchievementMetric | undefined, c: BonusCount
   if (metric === 'root') return c.rootLevels
   if (metric === 'bench') return c.benchLevels
   if (metric === 'treasures') return c.treasures
+  if (metric === 'gathers') return c.gathers
+  if (metric === 'playtime') return c.playMinutes
   return c.pointsEarned
 }
 

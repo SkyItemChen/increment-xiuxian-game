@@ -34,6 +34,8 @@ const ZERO = {
   benchLevels: 0,
   treasures: 0,
   qiLog10: -Infinity,
+  gathers: 0,
+  playMinutes: 0,
 }
 
 /** 结丹线之前的贪心和运行时那颗一键购买同一条口径：过线之前只买丹炉与火候 */
@@ -121,7 +123,7 @@ const probes = [
   ['只有三条线炼满', { pillLevels: { danLu: 99, huoHou: 99, danFang: 99 } }],
   ['只把转盘抽到底（连带百转成渣那条挑战）', { pulls: 1e6 }],
   ['只把七道精神参悟到底', { spirits: Object.fromEntries(SPIRITS.map((s) => [s.id, 99])) }],
-  ['加属性成就全开（抽数那几条顺带咬合）', { qiLog10: 40, pulls: 1e6, explores: 99, jindan: 40, rootLevels: 99, benchLevels: 99, treasures: 7 }],
+  ['加属性成就全开（抽数那几条顺带咬合）', { qiLog10: 40, pulls: 1e6, explores: 99, jindan: 40, rootLevels: 99, benchLevels: 99, treasures: 7, gathers: 1e6, playMinutes: 999 }],
 ]
 for (const [label, part] of probes) {
   const b = totalBonus({ ...ZERO, ...part })
@@ -141,6 +143,8 @@ const ALL = totalBonus({
   explores: 1e4,
   pointsEarned: 1e6,
   qiLog10: 99,
+  gathers: 1e6,
+  playMinutes: 999,
 })
 console.log(
   `\n【全开的总账】出丹 +${Math.round(ALL.danAdd * 100)}% · 丹炼回灵气 +${Math.round(ALL.qiAdd * 100)}%` +

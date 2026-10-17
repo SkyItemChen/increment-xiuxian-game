@@ -3,7 +3,7 @@
  * 版本号只有这一处，页头和修行页角上都读它——改一次玩法就往上挪一格。
  * 每条一句话说完，只写玩家能感觉到的变化，不写实现层的东西。
  */
-export const GAME_VERSION = '0.13'
+export const GAME_VERSION = '0.14'
 
 export interface ChangelogEntry {
   version: string
@@ -13,6 +13,16 @@ export interface ChangelogEntry {
 }
 
 export const CHANGELOG: ChangelogEntry[] = [
+  {
+    version: '0.14',
+    date: '2026-10-18',
+    items: [
+      '练气新增三条成就：气满丹田（累计灵气 1e11）、吐纳有常（累计吐纳 500 次）、静坐忘机（在线修行 50 分钟）',
+      '三条各加到不同的地方：出丹 +10%、灵气产出 +5%、按秒折点 ×1.1',
+      '境界标签改用正楷，字号抬到 16 号，字不再显小',
+      '顶栏版本号右边只留三道杠，点它就是更新日志，不再单占一个“日志”按钮',
+    ],
+  },
   {
     version: '0.13',
     date: '2026-10-17',

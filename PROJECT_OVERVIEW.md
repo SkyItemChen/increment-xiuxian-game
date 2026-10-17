@@ -178,10 +178,11 @@ interface BonusCounters {
 
 ### 6.1 结构
 
-[`src/game/词条与属性.ts`](src/game/%E8%AF%8D%E6%9D%A1%E4%B8%8E%E5%B1%9E%E6%80%A7.ts) 中的 `ACHIEVEMENTS` 表共 **21 条**：
+[`src/game/词条与属性.ts`](src/game/%E8%AF%8D%E6%9D%A1%E4%B8%8E%E5%B1%9E%E6%80%A7.ts) 中的 `ACHIEVEMENTS` 表共 **24 条**：
 
 - **7 条自动化/便利解锁**（无 bonus）：无为而治、不取一毫、根骨自成、鉴宝有度、不劳而获、一丹在手、转过一圈
-- **14 条加属性**（有 bonus，筑基 5 条 + 金丹 9 条）：
+- **17 条加属性**（有 bonus，练气 3 条 + 筑基 5 条 + 金丹 9 条）：
+  - 练气（3 条，读练气自己做的三件事）：气满丹田（danAdd 0.1，读累计灵气 1e11）、吐纳有常（energyAdd 0.05，读累计吐纳 500 次）、静坐忘机（passMul 1.1，读在线修行 50 分钟）
   - 筑基（5 条，只给 passMul）：初探宝山 ×1.05、三宝在身 ×1.08、慧眼识珍 ×1.1、点石成金 ×1.1、七宝俱全 ×1.2
   - 金丹第一档（4 条）：海纳百川（danAdd 0.2）、聚沙成塔（qiAdd 0.2）、踏破铁鞋（passMul 1.5）、丹成一品（energyAdd 0.5）
   - 金丹第二档（5 条）：返本还元（dregMul 1.25）、鼎中三昧（danAdd 0.35）、跬步千里（passMul 2.5）、灵源不竭（qiAdd 0.35）、气冲霄汉（energyAdd 0.75）
@@ -189,7 +190,7 @@ interface BonusCounters {
 ### 6.2 设计原则
 
 1. **零存档字段（丹纹除外）**：达成与否从累计账推导，读老存档不用迁移；丹纹四枝的等级是玩家亲手点的选择，随存档 `[32]` 保存
-2. **单调累计账做条件**：只用 `pillLevels` / `spirits` / `pulls` / `jindan` / `insightEarned` / `explores` / `pointsEarned` / `rootLevels` / `benchLevels` / `treasures` / `qiLog10`。花掉不减、探索清零也不减，所以解锁一次就一直开着；丹纹点也按 `jindan` 与里程碑现算，不另存余额
+2. **单调累计账做条件**：只用 `pillLevels` / `spirits` / `pulls` / `jindan` / `insightEarned` / `explores` / `pointsEarned` / `rootLevels` / `benchLevels` / `treasures` / `qiLog10` / `totalGathers` / `totalTime`。花掉不减、探索清零也不减，所以解锁一次就一直开着；丹纹点也按 `jindan` 与里程碑现算，不另存余额。后两笔（吐纳次数、在线时长）本来就在存档里，加度量不动存档格式；`loops` 押探索散功会归零，不能当门槛
 3. **独独不用累计凝练做第二档门槛**：转盘价与废渣供给同步缩放，导致 time-to-N-抽与流量无关，260 抽以上≈数年墙。第一档的 聚沙成塔 压在 170 抽已是这条墙上人还够得着的最后一格
 4. **奖励走 bonus 轴**：优先复用现有轴；需要新轴时按 §3.3 接入聚合，并给中性基准值
 5. **成就页按境界排序**：练气 → 筑基 → 金丹，后期玩法不许挤到前面

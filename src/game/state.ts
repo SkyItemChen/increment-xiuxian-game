@@ -596,6 +596,8 @@ function counters(): BonusCounters {
     benchLevels: Object.values(state.exploreLevels).reduce((a, b) => a + b, 0),
     treasures: Object.values(state.treasures).filter((lv) => lv > 0).length,
     qiLog10: state.totalEarned.log10(),
+    gathers: state.totalGathers,
+    playMinutes: Math.floor(state.totalTime / 60),
     jindanTree: state.jindanTree,
   }
 }
@@ -756,6 +758,8 @@ function achievementEarned(metric: AchievementDef['metric']): number {
   if (metric === 'root') return Object.values(state.rebirth).reduce((a, b) => a + b, 0)
   if (metric === 'bench') return Object.values(state.exploreLevels).reduce((a, b) => a + b, 0)
   if (metric === 'treasures') return Object.values(state.treasures).filter((lv) => lv > 0).length
+  if (metric === 'gathers') return state.totalGathers
+  if (metric === 'playtime') return Math.floor(state.totalTime / 60)
   return state.pointsEarned
 }
 

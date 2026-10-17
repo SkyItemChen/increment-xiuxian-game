@@ -78,6 +78,12 @@
 
   --font-kai: 'STKaiti', 'KaiTi', 'Noto Serif SC', 'SimSun', serif;
 
+  /* 正楷：境界标签专用。各平台楷体的名字都不一样，这里按「标准楷体优先」排——
+     Windows 的楷体（KaiTi）比华文楷体更端正，所以把它提到 STKaiti 前面；
+     实在没有楷体才退到宋体，免得字一落下去就成了印刷体的死板样 */
+  --font-zhengkai: 'KaiTi', 'STKaiti', 'Kaiti SC', 'KaiTi_GB2312', '楷体', 'LXGW WenKai',
+    'AR PL UKai CN', 'Noto Serif SC', serif;
+
   font-family: 'PingFang SC', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
   font-size: 16px;
   line-height: 1.6; /* 无单位，可安全继承到大字号 */

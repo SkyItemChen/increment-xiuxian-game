@@ -441,10 +441,12 @@ export function addBonus(sum: Bonus, add: Bonus): Bonus {
  * realm 记这条成就算在哪一境头上，成就页照它从上往下排——练气的在前，金丹的在后。
  *
  * 头七条成就是"解锁自动化/便利"那一类，好处长在 `state.ts` 的门槛函数上，所以不带 bonus；
- * 后十四条是加属性的，bonus 走下面 `Bonus` 那五条现成的轴，达成之后被动生效、没有领取那一步。
+ * 后十七条是加属性的，bonus 走下面 `Bonus` 那五条现成的轴，达成之后被动生效、没有领取那一步。
  * 筑基那五条只给 `passMul`：按秒折点要等金丹之后才开张，所以它们**碰不着练气与筑基的锚**，
  * 只是把往后每秒折进来的筑基点垫厚一点。金丹那九条的好处也一律在金丹开张之后才咬合，
- * 所以练气那一世（空树一世 20 分钟）的锚点一条都碰不着。
+ * 所以练气那一世（空树一世 15 分钟）的锚点一条都碰不着。
+ * 练气那三条里只有「吐纳有常」当场见效（+5% 灵气产出，量小到不挪 15 分钟那条锚），
+ * 另两条一个给丹、一个给折点，都要等金丹才咬合——练气能做的三件事各占一条，谁也不抢谁的。
  */
 export interface AchievementDef {
   id: string
@@ -463,7 +465,13 @@ export interface AchievementDef {
  * 成就的进度来源；全都只涨不跌：
  * points 累计筑基点、insight 累计见识、explores 累计押铲次数、
  * root 根骨五条合计等级、bench 鉴宝台四条合计等级、treasures 已收法宝件数、
- * layers 已结丹层数、qi 累计灵气到过多少、turns 累计转过多少次凝练。
+ * layers 已结丹层数、qi 累计灵气到过多少、turns 累计转过多少次凝练、
+ * gathers 累计吐纳次数、playtime 在线修行了多少分钟。
+ *
+ * 后两笔是练气那一世的账：`state.totalGathers` 与 `state.totalTime` 本来就在存档里（存档数组第 11、第 12 位），
+ * 所以加这两条度量不用动存档格式，也不用新起字段。
+ * 破境次数看着最像练气的账，可用不了：`state.loops` 在押探索散功那一刻会归零（`explore()` 里那句），
+ * 读它就等于让成就解锁之后又锁回去。要看"第几世"只能另存一笔累计，那要改存档格式，不值当。
  */
 export type AchievementMetric =
   | 'points'
@@ -475,6 +483,8 @@ export type AchievementMetric =
   | 'layers'
   | 'qi'
   | 'turns'
+  | 'gathers'
+  | 'playtime'
 
 /** 成就挂在哪一境名下 */
 export type AchievementRealm = '练气' | '筑基' | '金丹'
@@ -492,6 +502,21 @@ export const AUTO_BUY_UNLOCK_POINTS = 20
 
 /** 探索攒到 20 见识，参悟法门就只问灵气够不够、不再真的扣 */
 export const FREE_UPGRADE_UNLOCK_INSIGHT = 20
+
+/**
+ * 练气那一世的三条加属性成就，各读一笔自己在做的事，互不重叠：
+ * `QI_GATHERED_NEED` 读累计灵气（家底）、`GATHER_STEADY_NEED` 读累计吐纳次数（勤勉）、
+ * `SIT_STILL_MINUTES` 读在线修行时长（坐得住）。三笔都是只涨不跌的账：
+ * 破境、结丹、散功清的是手上的灵气与法门修为，这几笔一笔都不清。
+ *
+ * 落点按 `sim/realm-timeline.mjs` 的练气段定（那一段 13 世约 54 分）：
+ * 累计灵气过 1e11 大概第二、三世就到；吐纳 5 秒一笔，500 次约 30 分钟；
+ * 静坐 50 分钟正好踩在练气收尾。空树一世（15.0 分那条锚）之前一条都够不着，
+ * 所以谁也没法靠它们把开局压快。
+ */
+export const QI_GATHERED_NEED = 1e11
+export const GATHER_STEADY_NEED = 500
+export const SIT_STILL_MINUTES = 50
 
 /**
  * 金丹那道破境线摆在同一个数上：累计灵气到过它，练气就不必再一世一世破境了，
@@ -587,6 +612,40 @@ export const ACHIEVEMENTS: AchievementDef[] = [
     need: FREE_UPGRADE_UNLOCK_INSIGHT,
     metric: 'insight',
     realm: '练气',
+  },
+  /**
+   * 练气这三条加属性成就，三条轴各占一条，好处都不跟已有的重复：
+   * 累计灵气只买得起出丹、吐纳次数只买得起灵气产出（唯一在练气当场咬合、也最小的一笔 +5%，
+   * 好让新玩家有一点即时回报）、在线时长给的是折点——后两条要等金丹开张才咬合，
+   * 和筑基那五条给 `passMul` 是同一个理由：先把往后的底子垫厚，不搅练气这一世的节奏。
+   * 门槛刻意错开：家底、勤勉、静坐分别落在练气的中段、后段、收尾，不会三条一起弹出来。
+   */
+  {
+    id: 'qiGathered',
+    name: '气满丹田',
+    desc: '每一炉的丹 +10%',
+    need: QI_GATHERED_NEED,
+    metric: 'qi',
+    realm: '练气',
+    bonus: { danAdd: 0.1 },
+  },
+  {
+    id: 'gatherSteady',
+    name: '吐纳有常',
+    desc: '灵气产出 +5%',
+    need: GATHER_STEADY_NEED,
+    metric: 'gathers',
+    realm: '练气',
+    bonus: { energyAdd: 0.05 },
+  },
+  {
+    id: 'sitStill',
+    name: '静坐忘机',
+    desc: '每秒进的筑基点 1.10 倍',
+    need: SIT_STILL_MINUTES,
+    metric: 'playtime',
+    realm: '练气',
+    bonus: { passMul: 1.1 },
   },
   /**
    * 筑基这七条：五条是里程碑，两条把根骨与鉴宝台的代买拆开。
@@ -777,6 +836,8 @@ export function metricLabel(metric: AchievementMetric | undefined): string {
   if (metric === 'root') return '级根骨'
   if (metric === 'bench') return '级鉴宝台'
   if (metric === 'treasures') return '件法宝'
+  if (metric === 'gathers') return '次吐纳'
+  if (metric === 'playtime') return '分钟修行'
   return '筑基点'
 }
 
