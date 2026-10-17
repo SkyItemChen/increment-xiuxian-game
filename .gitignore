@@ -22,3 +22,8 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+
+# AI 助手的本地笔记：只在这台机器上有用，永远不提交。
+# 项目真正的规矩与数值写在 AGENTS.md / GAME_NUMBERS.md / PROJECT_OVERVIEW.md 里，
+# 那三份才是给人和 AI 看的正式文档，这里不指望被同步。
+.workbuddy/
