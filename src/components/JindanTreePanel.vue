@@ -2,17 +2,23 @@
 import { computed } from 'vue'
 import {
   buyJindanTree,
+  jindanState,
   jindanTreeEarned,
   jindanTreePoints,
   jindanTreeRows,
   jindanTreeSpent,
+  jindanTreeTotalLevels,
   type JindanTreeRow,
 } from '../game/state'
+import { jindanRitualSeconds } from '../game/金丹丹炉'
 
 /**
  * 金丹页第四栏：丹纹四枝。
  * 点数只从结丹层数与结丹里程碑来——每结一层给一点，里程碑再额外添几点。
  * 四枝各自往上点，先点哪一枝就是这一层的策略，所以这里没有一键、也没有代点。
+ *
+ * 丹纹的用处写在结丹仪式上：四枝的**总等级**每级把仪式缩短 1%（最多省一半）。
+ * 每级价 n 点是凸的，所以"补最短的那枝"能买到最多总等级——这一栏唯一的算法就在这里。
  */
 const emit = defineEmits<{ back: [] }>()
 
@@ -20,6 +26,12 @@ const rows = computed<JindanTreeRow[]>(() => jindanTreeRows())
 const points = computed(() => jindanTreePoints())
 const earned = computed(() => jindanTreeEarned())
 const spent = computed(() => jindanTreeSpent())
+const depth = computed(() => jindanTreeTotalLevels())
+const gate = computed(() => jindanState())
+/** 眼下这一层要攒多少秒；再点一级能缩到多少（封底后不再变） */
+const seconds = computed(() => jindanRitualSeconds(gate.value.layer, depth.value))
+const nextSeconds = computed(() => jindanRitualSeconds(gate.value.layer, depth.value + 1))
+const capped = computed(() => nextSeconds.value >= seconds.value - 1e-6)
 </script>
 
 <template>
@@ -32,6 +44,13 @@ const spent = computed(() => jindanTreeSpent())
 
       <p class="ledger">
         已得 <b>{{ earned }}</b> 点 · 已点 <b>{{ spent }}</b> 点
+      </p>
+
+      <p class="brake">
+        丹纹 <b>{{ depth }}</b> 级 · 结丹仪式 <b>{{ seconds.toFixed(0) }} 秒</b>
+        <span class="hint">{{
+          capped ? '已缩到封底（一半），再点不再变' : `再点一级 → ${nextSeconds.toFixed(0)} 秒`
+        }}</span>
       </p>
 
       <ul class="list">
@@ -59,7 +78,12 @@ const spent = computed(() => jindanTreeSpent())
         点数只增不减，这一世散掉的灵气与法门修为不影响丹纹。
       </p>
       <p class="note">
-        四枝先点哪一枝都行：丹道与炉火喂丹炉那一头，返元喂灵气，识海让往后每一层结丹多攒见识。
+        丹纹管的是<b>结丹这一炉要攒多久</b>：每一点总等级把仪式缩短 1%，攒到 42 级省一半（封底）。
+        门槛等于「你自己的产量 × 仪式秒数」，所以丹纹省下的每一秒，都是实打实的提前一层。
+        每级价是「第几级就几点」，所以想让总级最多，就得补在最短的那枝上。
+      </p>
+      <p class="note">
+        丹道与返元顺带抬产出，识海让往后每一层结丹多攒见识，炉火多出废渣。
         没有代点，也没有洗点——点下去就跟着金丹一起留着。
       </p>
       <button class="back" type="button" @click="emit('back')">回 丹 炉</button>
@@ -115,6 +139,30 @@ const spent = computed(() => jindanTreeSpent())
 .ledger b {
   color: var(--sky-deep);
   font-size: 14px;
+}
+
+/* 丹纹深度 → 结丹每层涨幅：这一栏唯一要盯的数，给它一行独立的底色 */
+.brake {
+  margin: 10px 0 0;
+  padding: 8px 12px;
+  border: 1px solid var(--accent-line);
+  border-radius: 10px;
+  background: var(--accent-wash);
+  font-size: 13px;
+  letter-spacing: 0.5px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+.brake b {
+  color: var(--accent-deep);
+  font-weight: 500;
+}
+
+.hint {
+  margin-left: 6px;
+  color: var(--ink-faint);
+  font-size: 12px;
 }
 
 .list {

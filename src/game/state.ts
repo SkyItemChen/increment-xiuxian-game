@@ -9,7 +9,12 @@ import { drawCount, exploreCost, EXPLORE_UNLOCK_POINTS, freshSeed, insightOfStak
 import type { ExploreMods, ExploreOutcome } from './explore'
 import {
   FURNACE_ID,
+  jindanCost,
+  jindanCostGrowth,
+  jindanDanCostLog10,
+  jindanDanRitualSeconds,
   jindanReturnMult,
+  jindanRitualSeconds,
   pillBulkCostLog10,
   pillCostLog10,
   pillFlowLog10,
@@ -58,6 +63,7 @@ import {
   findRebirth,
   findUpgrade,
   GATHER_CRIT_MULT,
+  JIEDAN_DAN_BURN_ALL,
   JIEDAN_FURNACE_LEVEL,
   JINDAN_MILESTONES,
   JINDAN_TREE,
@@ -80,6 +86,8 @@ import {
   SPIRITS,
   spiritCurrent,
   TREASURES,
+  TRIALS,
+  TRIAL_MIN_TARGET_LOG10,
   type AchievementDef,
   type Bonus,
   type ChallengeDef,
@@ -91,8 +99,65 @@ import {
   type PillModeId,
   type RebirthDef,
   type SpiritDef,
+  type TrialDef,
   type UpgradeDef,
 } from './词条与属性'
+import {
+  NO_TRIAL,
+  findTrialIndex,
+  markTrialDone,
+  trialCompleted,
+  trialDoneCount,
+  trialGateJindan,
+  trialGateName,
+  trialJindanOpen,
+  trialMet,
+  trialMinJindan,
+  trialOutputMul,
+  trialPeriodMul,
+  trialPriceMul,
+  trialProgress,
+  trialSlowFactor,
+  trialTargetOf,
+  trialAt,
+  trialDaoJiOf,
+  trialDaoJiTotal,
+} from './试炼'
+import { YUAN_GATE_JINDAN_LAYER } from './元婴'
+import {
+  FIGHT_INSIGHT_LINES,
+  FIGHT_UNLOCK_TOTAL_DAOJI,
+  SHENWU_LINES,
+  YUAN_UNLOCK_LOG10,
+  autoBreakUnlocked,
+  fightModeAt,
+  fightModeIndex,
+  fightInsightCost,
+  fightWaveCap,
+  findFightMode,
+  findYuanMode,
+  generalCost,
+  metaMultOf,
+  normalizeYuanAuto,
+  shenNianPerSecond,
+  shouldAutoBreak,
+  warSoulPerKill,
+  warSoulPerSecond,
+  yuanBuildingCost,
+  yuanDrainKeep,
+  yuanDaoGainLog10,
+  yuanModeAt,
+  yuanModeIndex,
+  yuanRateLog10,
+  yuanThresholdLog10,
+  shenWuCost,
+  type AutoBreakTrigger,
+  type FightModeDef,
+  type FightModeId,
+  type ShenWuLineDef,
+  type YuanModeDef,
+  type YuanModeId,
+} from './元婴'
 
 /** 游戏阶段：开始画面 → 游戏中 */
 export type GamePhase = 'start' | 'playing'
@@ -118,15 +183,15 @@ export const GLOBAL_SPEEDS = [1, 2, 5, 10, 50, 100] as const
 export type GlobalSpeed = (typeof GLOBAL_SPEEDS)[number]
 
 /**
- * 吐纳进度条的基准时长（秒）。吐纳速度词条不改变每笔结算额，只让这一格来得更勤，
- * 所以它是全局收益倍率；第一世根基 1 灵气/秒时，起手第一格正好给 5 灵气。
+ * 吐纳进度条的基准时长（秒）。吐纳速度词条不改变每秒产出，只让这一格来得更勤，
+ * 所以它是节奏而不是收益：第一世根基 1 灵气/秒时，起手第一格正好给 3 灵气。
  */
-export const GATHER_PERIOD = 5
+export const GATHER_PERIOD = 3
 
 /**
- * 吐纳速度上限（倍）：每 `GATHER_PERIOD` 秒最多 50 万次吐纳，折下来一跳 10 微秒。
+ * 吐纳速度上限（倍）：每 `GATHER_PERIOD` 秒最多 50 万次吐纳，折下来一跳 6 微秒。
  *
- * 为什么非设不可：吐纳速度是"每 5 秒几次"的倍率，`gatherSeconds = 5 / 速度`。
+ * 为什么非设不可：吐纳速度是"每 3 秒几次"的倍率，`gatherSeconds = 3 / 速度`。
  * 速度被法门堆到 1e308 以上就会溢出成 `Infinity`，于是 `gatherSeconds = 0`、
  * `cycles = 时长 / 0 = Infinity`，而 `BigNumber.mulNumber(Infinity)` 的尾数会被抹成 0——
  * **灵气、丹、每秒产出一起归零，一格都拿不到**（这就是"速度溢出后灵气不再增长"）。
@@ -134,13 +199,13 @@ export const GATHER_PERIOD = 5
  * 截断掉的那一截不扔，按等比例折成灵气加成（见 `recompute()` 的 `gatherOverflowLog10`），
  * 所以 `灵气/秒 = 每笔金额 × 吐纳速度` 与截断前完全相等，产出一点不少。
  *
- * 取 50 万倍的由头：一帧 16.7ms 最多 1670 跳，会心仍走逐次掷、落在预算内；
- * 8 小时闭关封顶 2.88e9 跳，还在 double 的整数精度里；再快下去结算本来就要折期望，
+ * 取 50 万倍的由头：一帧 16.7ms 最多 2780 跳（3 秒周期 / 50 万），仍在 `rollCrits` 的 2 万额度内，
+ * 会心还能逐次掷；8 小时闭关封顶 4.8e9 跳，还在 double 的整数精度里；再快下去结算本来就要折期望，
  * 速度已经只剩个数字好看，不如换成每笔金额。
  */
 export const GATHER_SPEED_CAP = 5e5
 
-/** 两次吐纳之间至少隔这么久（秒），由上限推出来：10 微秒 */
+/** 两次吐纳之间至少隔这么久（秒），由上限推出来：6 微秒 */
 export const GATHER_MIN_SECONDS = GATHER_PERIOD / GATHER_SPEED_CAP
 
 /**
@@ -250,6 +315,42 @@ export interface GameState {
   jindanTree: Record<string, number>
   /** 定价用的锚：见过的最高灵气/秒（log10）。只涨不跌，所以"自废流量再买丹"讨不到便宜 */
   pillAnchor: number
+  /** 正在进行的试炼下标（对应 TRIALS），-1 = 不在试炼里 */
+  trialId: number
+  /** 这一局试炼的目标：本世累计灵气要重新爬到的 log10。进试炼那一刻就钉死 */
+  trialTarget: number
+  /** 已完成的试炼（位图，下标对应 TRIALS）。只涨不跌，加成从它推出来、不另存等级 */
+  trialDone: number
+  /* ------------------------------ 元婴（0.22 接线） */
+  /**
+   * 元神存量：只在本世有效，大突破时一次清空。
+   * 它不参与练气/金丹的任何定价，只在元婴这一层里流转。
+   */
+  yuan: BigNumber
+  /** 炼神三档：守神 / 凝魄 / 夺舍。只影响"每秒产出怎么分"，不烧存量 */
+  yuanMode: YuanModeId
+  /** 已大突破几次。只涨不跌，累计 12 次发自动器 */
+  yuanBreaks: number
+  /** 元婴道基（跨世，两位小数）。神悟台花它 */
+  daoJi: number
+  /** 累计道基（只涨不跌）：斗法解锁、成就看它 */
+  daoJiEarned: number
+  /** 神念（跨世）：元神宫产它，战悟花它 */
+  shenNian: number
+  /** 元神宫等级：每级多产神念，价格 1.7^级 */
+  yuanBuilding: number
+  /** 神悟台八条的等级 */
+  shenWu: Record<string, number>
+  /** 自动大突破：0 = 关，其余是"等到阈值几倍再破"（1/2/5/10） */
+  yuanAuto: number
+  /** 战魂（本世）：斗法击杀换来的，买战将；大突破清零 */
+  warSoul: number
+  /** 战将等级（本世）：每级抬一波可斩上限；大突破清零 */
+  general: number
+  /** 斗法三档：守御 / 奋击 / 死战 */
+  fightMode: FightModeId
+  /** 战悟五条的等级（跨世） */
+  fightInsight: Record<string, number>
   /** 抽取序列的游标：预览与结算共用它，取消再点开不会重抽 */
   seed: number
   /** 紫金葫芦的会心概率，recompute() 折出来给主循环和界面用 */
@@ -303,6 +404,22 @@ function freshState(): GameState {
     jindan: 0,
     jindanTree: {},
     pillAnchor: 0,
+    trialId: NO_TRIAL,
+    trialTarget: 0,
+    trialDone: 0,
+    yuan: BigNumber.zero(),
+    yuanMode: 'shouShen',
+    yuanBreaks: 0,
+    daoJi: 0,
+    daoJiEarned: 0,
+    shenNian: 0,
+    yuanBuilding: 0,
+    shenWu: {},
+    yuanAuto: 0,
+    warSoul: 0,
+    general: 0,
+    fightMode: 'shouYu',
+    fightInsight: {},
     seed: freshSeed(),
     gatherCritChance: 0,
     totalGathers: 0,
@@ -652,6 +769,9 @@ function counters(): BonusCounters {
     gathers: state.totalGathers,
     playMinutes: Math.floor(state.totalTime / 60),
     jindanTree: state.jindanTree,
+    trialDone: state.trialDone,
+    shenWu: state.shenWu,
+    fightInsight: state.fightInsight,
   }
 }
 
@@ -697,10 +817,13 @@ export function recompute(): void {
   state.gatherOverflowLog10 = safeSpeedLog > capLog ? safeSpeedLog - capLog : 0
   state.gatherSpeed =
     state.gatherOverflowLog10 > 0 ? GATHER_SPEED_CAP : Math.pow(10, safeSpeedLog)
-  state.gatherSeconds = GATHER_PERIOD / state.gatherSpeed
+  state.gatherSeconds = (GATHER_PERIOD / state.gatherSpeed) * trialPeriodMul(state.trialId)
   const back =
     (1 + energyAdd + spiritEnergyAdd(state.spirits) + energyBonusAdd(bonus)) *
     jindanReturnMult(state.jindan) *
+    // 炼神三档的"返哺留存"：夺舍把结丹回溯压到四成，换元神产量；
+    // 接在结丹回溯这一笔上而不是整份产出，守神（1.0）以外的档才动得着
+    (yuanRealmOpen() ? findYuanMode(state.yuanMode).qiKeep : 1) *
     (1 + qiAxisAdd(state.pillLevels, state.spirits) + qiBonusAdd(bonus))
   const base = BigNumber.from(GATHER_BASE)
     .mul(gatherMult)
@@ -710,19 +833,30 @@ export function recompute(): void {
     .mulNumber(back)
   // 速度被截掉多少倍，每笔金额就乘回多少倍：`每笔 × 速度` 与截断前严丝合缝，
   // 灵气/秒（连带炼丹、按秒折点）一点没少，只是"格子跳得没那么密、每一笔更大"
-  const rate =
+  const raw =
     state.gatherOverflowLog10 > 0
       ? base.mul(BigNumber.fromLog10(state.gatherOverflowLog10))
       : base
+  // 试炼的产出压制挂在这里：灵气与丹一起降，玩家看到的就是"每秒变少了"。
+  // 它乘在 rate 上而不是拆进五条轴，所以试炼一结束就原样回来，不会在加成账里留下痕迹
+  const trialMul = trialOutputMul(state.trialId)
+  // 元道总倍率：顶层乘一次，乘在 rate 上，于是出丹与废渣跟着一起放大。
+  // 0 级时 `metaMultOf(0) === 1`，旧链一个数位都不动；它不乘元神/神念/战魂。
+  const meta = yuanRealmOpen() ? metaMultOf(shenWuLevel('yuanDao')) : 1
+  const mul = trialMul * meta
+  const rate = mul === 1 ? raw : raw.mulNumber(mul)
   state.gatherCritChance = Math.min(t.critChance + critChance, 1)
   state.spiritPerGather = rate.mulNumber(GATHER_PERIOD)
   state.spiritPerSecond = rate.mulNumber(state.gatherSpeed)
   // 定价锚只涨不跌：故意自废流量（押一铲探索）再来买丹讨不到便宜
   const flow = state.spiritPerSecond.log10()
   if (flow > state.pillAnchor) state.pillAnchor = flow
-  // 武火那几成丹之外，挑战/里程碑/成就白给的几成也添在同一个加数上
+  // 武火那几成丹之外，挑战/里程碑/成就白给的几成也添在同一个加数上。
+  // 炼神模式的"丹留存"（守神 90%、夺舍 20%）乘在这一笔上：它分走的是**这一秒新出的丹**，
+  // 存量丹一分不动，所以面板上"每秒出多少丹"也跟着换成留存后的数
+  const danKeep = yuanRealmOpen() ? findYuanMode(state.yuanMode).danKeep : 1
   state.danPerSecond = pillRate(state.spiritPerSecond, state.pillLevels).mulNumber(
-    danYieldMult(state.spirits) + danBonusAdd(bonus),
+    (danYieldMult(state.spirits) + danBonusAdd(bonus)) * danKeep,
   )
 }
 
@@ -752,15 +886,20 @@ export function quoteOf(id: string, amount: BuyAmount): Quote | null {
   if (!def) return null
   const growthCut = priceCut()
   const level = state.levels[def.id] ?? 0
+  // 试炼抬价：预算先按倍数缩回去，再交给闭式解；报价本身乘回来。
+  // 两处必须同步，否则"买得起"的绿灯会虚报
+  const priceMul = trialPriceMul(state.trialId)
+  const budgetLog = shown.spirit.log10() - Math.log10(priceMul)
   let count: number
   if (amount === 'max') {
     // 用快照算，保证按钮显示的"买得起"和真实余额方向一致（只会保守，不会虚报）
-    count = maxAffordable(def, level, shown.spirit.log10(), growthCut)
+    count = maxAffordable(def, level, budgetLog, growthCut)
     if (count < 1) count = 1
   } else {
     count = amount
   }
-  return { count, cost: bulkCost(def, level, count, growthCut) }
+  const cost = bulkCost(def, level, count, growthCut)
+  return { count, cost: priceMul === 1 ? cost : cost.mulNumber(priceMul) }
 }
 
 /** 参悟法门：一次买 1 级或把买得起的全买了，买得起才扣 */
@@ -769,13 +908,19 @@ export function buyUpgrade(id: string, amount: BuyAmount = 1): boolean {
   if (!def) return false
   const growthCut = priceCut()
   const level = state.levels[def.id] ?? 0
-  let count = amount === 'max' ? maxAffordable(def, level, state.spirit.log10(), growthCut) : amount
+  const priceMul = trialPriceMul(state.trialId)
+  const budgetLog = state.spirit.log10() - Math.log10(priceMul)
+  let count = amount === 'max' ? maxAffordable(def, level, budgetLog, growthCut) : amount
   if (count < 1) return false
   // maxAffordable 是闭式解，浮点误差可能多算一级，逐级回退到真实买得起的数量
-  let price = bulkCost(def, level, count, growthCut)
+  const priceOf = (n: number) => {
+    const c = bulkCost(def, level, n, growthCut)
+    return priceMul === 1 ? c : c.mulNumber(priceMul)
+  }
+  let price = priceOf(count)
   while (count > 1 && !state.spirit.gte(price)) {
     count -= 1
-    price = bulkCost(def, level, count, growthCut)
+    price = priceOf(count)
   }
   if (!state.spirit.gte(price)) return false
   // 「不取一毫」免掉的是灵气这份开销，价目表照旧当墙：灵气没攒到这一层的价，仍然悟不进去
@@ -985,9 +1130,17 @@ export function autoBuyGate(): { unlocked: boolean; earned: number; need: number
   return { unlocked: earned >= AUTO_BUY_UNLOCK_POINTS, earned, need: AUTO_BUY_UNLOCK_POINTS }
 }
 
+/**
+ * 试炼期间一律不代买。试炼的主题是"亲手重走一遍"，
+ * 代买会把「独行」那一档直接抹平成普通一世，也会让另外三档的"慢"失去体感。
+ */
+export function autoBlocked(): boolean {
+  return state.trialId !== NO_TRIAL
+}
+
 /** 开关拨上、成就也到了，主循环才真的代买 */
 export function autoBuyActive(): boolean {
-  return state.settings.autoBuyCultivate && autoBuyGate().unlocked
+  return state.settings.autoBuyCultivate && autoBuyGate().unlocked && !autoBlocked()
 }
 
 /**
@@ -1017,6 +1170,9 @@ export function needExploreConfirm(): boolean {
  */
 export function realmToBreakThrough(): { realm: Realm; reached: boolean } | null {
   if (pointPassActive()) return null
+  // 试炼期间破境封死：不然进试炼按一下破境就跑了，重置与目标同时失去意义。
+  // 这一条同时关掉预览、结算、界面三头，不用在每处各写一遍
+  if (state.trialId !== NO_TRIAL) return null
   const realm = breakRealm()
   if (!realm) return null
   return { realm, reached: state.spirit.gte(realm.breakThrough as BigNumber) }
@@ -1065,8 +1221,11 @@ export function pointLump(earned: BigNumber): number {
 /** 每秒折给玩家的筑基点（未取整），界面念的就是这个数。定息把它往上乘，cap 在词条表里；火候到家那条挑战也乘在这一条上 */
 export function pointPassPerSecond(): number {
   if (!pointPassActive()) return 0
+  // 元道总倍率也乘在这一条上：§11.7 把"按秒折点"列进了 `metaMult` 的乘项。
+  // 0 级时倍率是 1，旧锚一位不动；1e80 之后才可能不是 1，所以练气/金丹的定标都没被碰过
+  const meta = yuanRealmOpen() ? metaMultOf(shenWuLevel('yuanDao')) : 1
   return (
-    pointLump(state.totalEarned) * POINT_PASS_RATE * pointPassMult(state.spirits) * passBonusMult(activeBonus())
+    pointLump(state.totalEarned) * POINT_PASS_RATE * pointPassMult(state.spirits) * passBonusMult(activeBonus()) * meta
   )
 }
 
@@ -1262,6 +1421,9 @@ export function explore(): boolean {
 const JINDAN_INDEX = REALMS.findIndex((r) => r.id === 'jindan')
 const JIEDAN_FLOOR = REALMS[JINDAN_INDEX].breakThrough as BigNumber
 
+/** 元婴那一境：标签位置同样从 REALMS 上取，别在运行时里写 3 */
+const YUAN_INDEX = REALMS.findIndex((r) => r.id === 'yuanying')
+
 /**
  * 丹炉开张的门槛：累计修来的灵气到过金丹那条保底（1e30）。
  * 看累计不看手上——破境和探索都会把灵气散干净，用余额当门槛等于每一世都要重新攒够一次才让看炉子。
@@ -1275,9 +1437,14 @@ export function pillUnlocked(): boolean {
 /**
  * 境界标签开到第几境。金丹那一页在**结丹之前**就要摆出来——丹炉是在那一页上买的，
  * 等结完丹才给标签等于让玩家找不到炉子。
+ *
+ * 元婴页同理：它的门票是结丹一层（`yuanTabOpen()`），不是 `realmIndex`。
+ * 0.22 之后 `realmIndex` 能到 3 了，但那是**结婴**的结果；试炼要在结婴之前就能打，
+ * 所以标签仍然先按结丹层数亮出来，结婴只负责把炼神/神悟/斗法三个子页打开。
  */
 export function realmTabDepth(): number {
-  return Math.max(state.realmIndex, pillUnlocked() ? JINDAN_INDEX : 0)
+  const base = Math.max(state.realmIndex, pillUnlocked() ? JINDAN_INDEX : 0)
+  return yuanTabOpen() ? Math.max(base, YUAN_INDEX) : base
 }
 
 /** 丹炉那一页的一行报价 */
@@ -1394,7 +1561,7 @@ export function autoBuyPillGate(): { unlocked: boolean; earned: number; need: nu
 
 /** 开关拨上、成就也到了，主循环才真的代买丹炉——和练气代买同一句式子 */
 export function autoBuyPillActive(): boolean {
-  return state.settings.autoBuyPill && autoBuyPillGate().unlocked
+  return state.settings.autoBuyPill && autoBuyPillGate().unlocked && !autoBlocked()
 }
 
 /**
@@ -1420,8 +1587,10 @@ export function pillBatch(): PillBatchQuote {
   const bust = bustChance(mode, state.spirits)
   const dan = state.danPerSecond.mulNumber(PILL_PERIOD * mode.yieldMult)
   // 渣按"这一炉该出的丹"折，所以先把 yieldMult 除掉，回到该出丹那一档；
-  // 百转成渣、见微知著那两条白给的赔率整体乘在这一笔上
-  const dreg = dan.mulNumber((dregYieldMult(mode, state.spirits) * dregBonusMult(activeBonus())) / mode.yieldMult)
+  // 百转成渣、见微知著那两条白给的赔率整体乘在这一笔上；炼神三档的渣留存也在这儿换
+  const dreg = dan.mulNumber(
+    ((dregYieldMult(mode, state.spirits) * dregBonusMult(activeBonus())) / mode.yieldMult) * dregKeepScale(),
+  )
   return { mode, dan, dreg, bust, floored: bust <= BUST_FLOOR }
 }
 
@@ -1524,7 +1693,7 @@ export function autoPullGate(): { unlocked: boolean; earned: number; need: numbe
 
 /** 开关拨上、成就也到了，主循环才真的代抽 */
 export function autoPullActive(): boolean {
-  return state.settings.autoBuyPull && autoPullGate().unlocked
+  return state.settings.autoBuyPull && autoPullGate().unlocked && !autoBlocked()
 }
 
 /** 替玩家把抽得起的都抽掉（主循环每个代买间隔走一次） */
@@ -1566,11 +1735,11 @@ export function autoBuyExploreGate(): { unlocked: boolean; earned: number; need:
 
 /** 开关拨上、成就也到了，主循环才真的代买 */
 export function autoBuyRebirthActive(): boolean {
-  return state.settings.autoBuyRebirth && autoBuyRebirthGate().unlocked
+  return state.settings.autoBuyRebirth && autoBuyRebirthGate().unlocked && !autoBlocked()
 }
 
 export function autoBuyExploreTreeActive(): boolean {
-  return state.settings.autoBuyExplore && autoBuyExploreGate().unlocked
+  return state.settings.autoBuyExplore && autoBuyExploreGate().unlocked && !autoBlocked()
 }
 
 /**
@@ -1586,23 +1755,53 @@ function syncAutomationSettings(): void {
   if (!autoPullGate().unlocked) state.settings.autoBuyPull = false
 }
 
-/** 结丹的账面：门槛差多少、结成之后产出乘几 */
+/** 结丹的账面：两道闸各差多少、结成之后产出乘几 */
 export function jindanState(): {
   ready: boolean
   furnace: number
   need: number
+  /** 这一层结丹要的灵气：max(1e30 老阶梯, 历史最高灵气/秒 × 仪式秒数) */
   floor: BigNumber
+  /** 第 1 层那道基准门槛，面板上用来对照"涨了多少" */
+  base: BigNumber
+  /** 这一层要焚多少丹：丹/秒 × 丹仪式秒数；没起炉时是 0（等于没有这道闸） */
+  danFloor: BigNumber
+  /** 这一层要攒多少秒灵气产量。门槛 ÷ 产量 就是它 */
+  ritualSeconds: number
+  /** 这一层要攒多少秒丹产量 */
+  danRitualSeconds: number
+  /** 眼下丹纹总等级：仪式秒数的折扣就是由它算的 */
+  depth: number
+  /** 老阶梯那套"每层涨幅"，只用于早盘展示 */
+  growth: number
+  layer: number
   spirit: BigNumber
+  dan: BigNumber
   mult: number
 } {
   const furnace = state.pillLevels[FURNACE_ID] ?? 0
+  const layer = state.jindan + 1
+  const depth = jindanTreeTotalLevels()
+  const floor = jindanCost(layer, depth, state.pillAnchor)
+  const danRateLog10 = state.danPerSecond.log10()
+  const danFloorLog10 = jindanDanCostLog10(layer, depth, danRateLog10)
+  const danFloor = Number.isFinite(danFloorLog10) ? BigNumber.fromLog10(danFloorLog10) : BigNumber.zero()
+  const danReady = danFloor.isZero || state.dan.gte(danFloor)
   return {
-    ready: furnace >= JIEDAN_FURNACE_LEVEL && state.spirit.gte(JIEDAN_FLOOR),
+    ready: furnace >= JIEDAN_FURNACE_LEVEL && state.spirit.gte(floor) && danReady,
     furnace,
     need: JIEDAN_FURNACE_LEVEL,
-    floor: JIEDAN_FLOOR,
+    floor,
+    base: JIEDAN_FLOOR,
+    danFloor,
+    ritualSeconds: jindanRitualSeconds(layer, depth),
+    danRitualSeconds: jindanDanRitualSeconds(layer, depth),
+    depth,
+    growth: jindanCostGrowth(depth),
+    layer,
     spirit: state.spirit,
-    mult: jindanReturnMult(state.jindan + 1),
+    dan: state.dan,
+    mult: jindanReturnMult(layer),
   }
 }
 
@@ -1622,10 +1821,20 @@ export interface JindanPreview {
   furnace: number
   /** 散去的那笔灵气 */
   spirit: BigNumber
+  /** 一起烧掉的那笔丹 */
+  dan: BigNumber
   /** 本世将清空的法门，只列出已有等级的 */
   wiped: { def: UpgradeDef; level: number }[]
   /** 下一世的灵气产出乘这个倍率 */
   mult: number
+  /** 结成这一层之后，再下一层的灵气门槛（按眼下丹纹深度与产量锚算） */
+  nextFloor: BigNumber
+  /** 这一层要攒多少秒灵气产量 / 丹产量 */
+  ritualSeconds: number
+  danRitualSeconds: number
+  /** 眼下丹纹总等级与老阶梯那套每层涨幅 */
+  depth: number
+  growth: number
   /** 结成这一层另给的见识：底数 1 点，识海每 5 级再添 1 点 */
   insightGain: number
 }
@@ -1640,8 +1849,14 @@ export function previewJindan(): JindanPreview | null {
     layer: state.jindan + 1,
     furnace: g.furnace,
     spirit: state.spirit.clone(),
+    dan: state.dan.clone(),
     wiped,
     mult: g.mult,
+    nextFloor: jindanCost(state.jindan + 2, g.depth, state.pillAnchor),
+    ritualSeconds: g.ritualSeconds,
+    danRitualSeconds: g.danRitualSeconds,
+    depth: g.depth,
+    growth: g.growth,
     insightGain: jindanInsightPerLayer(state.jindanTree),
   }
 }
@@ -1658,6 +1873,9 @@ export function jindanBreak(): boolean {
   if (!p) return false
   state.levels = {}
   state.spirit = BigNumber.zero()
+  // 这一世炼的丹凝进金丹（0.19）：丹原本永不清零，1e75 那堆既烧不掉也压不下门槛。
+  // 想留就先买成炉子——"花完再结"才是这一按应有的取舍。
+  if (JIEDAN_DAN_BURN_ALL) state.dan = BigNumber.zero()
   state.loopEarned = BigNumber.zero()
   state.jindan = p.layer
   state.insight += p.insightGain
@@ -1683,6 +1901,18 @@ export function jindanTreeEarned(): number {
 /** 已经点在四枝上的丹纹点 */
 export function jindanTreeSpent(): number {
   return treeSpent(state.jindanTree)
+}
+
+/**
+ * 四枝的总等级。结丹门槛的"每层涨幅"只读这一个数，
+ * 所以"补最短的那枝"就是最快的压涨幅方式（每级价 n 点，凸价目下这条贪心最优）。
+ */
+export function jindanTreeTotalLevels(): number {
+  let total = 0
+  for (const def of JINDAN_TREE) {
+    total += Math.min(def.cap, Math.max(0, Math.floor(state.jindanTree[def.id] ?? 0)))
+  }
+  return total
 }
 
 /** 手上还剩多少丹纹点。和筑基点一样，先算累计再减花掉，不另存一栏 */
@@ -1750,6 +1980,696 @@ export function buyJindanTree(id: string): boolean {
   return true
 }
 
+/* ------------------------------------------------------------------ 试炼 */
+
+/**
+ * 试炼的运行时那一头。判定与倍率在 [试炼.ts](./试炼.ts)，这里只负责读写 state。
+ *
+ * 一局的完整生命周期：
+ *   enterTrial  → 钉目标、执行一次"等同破境但不折点"的重置、打上标记
+ *   试炼中      → 产出/价格/周期按 debuff 变差，自动化与破境封着
+ *   settleTrial → 本世累计重新爬回目标，发点、记位、摘标记（加成从位图推，不另存）
+ *   abortTrial  → 随时可退，退出的只有标记；重置已经发生，那一世要不回来
+ */
+export interface TrialRow {
+  def: TrialDef
+  index: number
+  done: boolean
+  /** 正在打的就是这一道 */
+  active: boolean
+  /** 这一局要爬回的高度（log10）。没进试炼时按当前本世累计预演，让玩家先看清难度 */
+  targetLog10: number
+  /** 让同一段路慢几倍 */
+  slow: number
+  /** 眼下的结丹层数够不够开这一道（逐条判，不是整页共用一个门槛） */
+  unlocked: boolean
+  /** 这道要结到第几层丹才开（`TrialDef.minJindan`） */
+  minJindan: number
+  /** 界面上念的那句门槛（"结丹 3 层"） */
+  gateName: string
+  /** 这一道的道基奖励（结婴后才兑现；未结婴时念成"结婴后 +N"） */
+  daoJi: number
+  /** 道基是否已经到手：已过 **且** 已结婴（早过的在结婴那一刻补发） */
+  daoJiPaid: boolean
+}
+
+/**
+ * 试炼解锁：结过一层丹，才有可赌的跨世资产。
+ *
+ * 门槛从 `TRIALS` 的 `minJindan` 里取（`trialGateJindan` = 最浅的那一条），
+ * **不在这里写常数**：写死的话表里的门槛就只是装饰，往后要抬某一层也关不上。
+ *
+ * 读 `state.jindan` 而不是 `realmIndex`：试炼要在**结婴之前**就能打，
+ * 而 `realmIndex` 要结婴才推到元婴那一格；也不读 `loops`——后者在押探索散功时会归零
+ * （`explore()` 里写着 `state.loops = 0`），拿它当门槛等于"挖过宝就再也进不了试炼"。
+ * 结丹层数只增不减，才守得住这条线。
+ */
+export function trialGate(): { unlocked: boolean; jindan: number; need: number; name: string } {
+  const need = trialGateJindan(TRIALS)
+  const jindan = state.jindan
+  return { unlocked: jindan >= need, jindan, need, name: trialGateName(need) }
+}
+
+/**
+ * 元婴标签页开不开：**结丹一层**。
+ *
+ * 与 `trialGate()` 取同一个数不是巧合：元婴页第一区就是试炼，门票若比第一道试炼更浅，
+ * 玩家会打开一页点不动的牌；门票若更深，试炼就永远在页外。`sim/trial-check.mjs` 盯着这条等式。
+ * 炼神/神悟/斗法那三区另有一道**结婴**的门（`yuanUnlockGate()`），与这张票无关。
+ */
+export function yuanTabOpen(): boolean {
+  return state.jindan >= YUAN_GATE_JINDAN_LAYER
+}
+
+/** 元婴页的门槛，界面念"需 结丹 1 层"用 */
+export function yuanGate(): { open: boolean; jindan: number; need: number; name: string } {
+  return {
+    open: yuanTabOpen(),
+    jindan: state.jindan,
+    need: YUAN_GATE_JINDAN_LAYER,
+    name: trialGateName(YUAN_GATE_JINDAN_LAYER),
+  }
+}
+
+/**
+ * 进去之后要爬回的高度：**进入那一刻的本世累计**，但不低于筑基那道门。
+ * 只在进试炼之前调一次（清账之后 loopEarned 已经是 0，再问就只剩下限了）。
+ */
+export function trialPreviewTarget(): number {
+  return trialTargetOf(state.loopEarned.log10(), TRIAL_MIN_TARGET_LOG10)
+}
+
+export function trialRows(): TrialRow[] {
+  // 已经在局中：目标读存下来的那个；还没进：按眼下的高度预演
+  const target = state.trialId !== NO_TRIAL ? state.trialTarget : trialPreviewTarget()
+  const yuanOpen = yuanRealmOpen()
+  return TRIALS.map((def, index) => {
+    const minJindan = trialMinJindan(def)
+    const done = trialCompleted(state.trialDone, index)
+    return {
+      def,
+      index,
+      done,
+      active: state.trialId === index,
+      targetLog10: target,
+      slow: trialSlowFactor(def),
+      unlocked: trialJindanOpen(def, state.jindan),
+      minJindan,
+      gateName: trialGateName(minJindan),
+      daoJi: trialDaoJiOf(def),
+      daoJiPaid: done && yuanOpen,
+    }
+  })
+}
+
+/** 试炼中的实时进度。不在局中返回 null，界面拿它决定要不要画进度条 */
+export interface TrialStatus {
+  def: TrialDef
+  index: number
+  targetLog10: number
+  /** 眼下本世累计（log10） */
+  nowLog10: number
+  /** 0..1，按 log10 比例；线性比会永远贴着 0 */
+  progress: number
+  /** 还差几个数量级 */
+  gapLog10: number
+}
+
+export function trialStatus(): TrialStatus | null {
+  const def = trialAt(state.trialId)
+  if (!def) return null
+  const now = state.loopEarned.log10()
+  const target = state.trialTarget
+  return {
+    def,
+    index: state.trialId,
+    targetLog10: target,
+    nowLog10: Number.isFinite(now) ? now : 0,
+    progress: trialProgress(now, target),
+    gapLog10: Math.max(0, target - (Number.isFinite(now) ? now : 0)),
+  }
+}
+
+/**
+ * 入试炼。这一下是本作最贵的一颗按钮，所以顺序不能错：
+ * **先钉目标，再清账**——反过来的话目标会变成 0，等于白送。
+ *
+ * 重置范围**等同破境**（法门、灵气、本世累计、吐纳进度），
+ * 但破境该给的那笔筑基点不发——这正是"赌注"的含义：这一世的收成白扔。
+ * `loops` 也不加一：试炼不算一次破境，别让它顺带把破境加成与成就进度喂上去。
+ */
+export function enterTrial(id: string): boolean {
+  const index = findTrialIndex(id)
+  if (index < 0) return false
+  if (state.trialId !== NO_TRIAL || !trialGate().unlocked) return false
+  // 逐条判结丹层数：整页开了不等于这一道也开了（四道按 1/3/6/10 层分档）
+  if (!trialJindanOpen(trialAt(index), state.jindan)) return false
+  if (trialCompleted(state.trialDone, index)) return false
+  state.trialTarget = trialPreviewTarget()
+  state.trialId = index
+  for (const def of REALMS[CULTIVATE_INDEX].upgrades) state.levels[def.id] = 0
+  state.spirit = BigNumber.zero()
+  state.loopEarned = BigNumber.zero()
+  state.loopBanked = 0
+  gatherAcc = 0
+  state.gatherProgress = 0
+  recompute()
+  refreshDisplay()
+  saveGame()
+  return true
+}
+
+/**
+ * 主动退出。退的只有标记——重置在进入那一刻就已经发生，
+ * 这一世的灵气与法门回不来。这一条要写在确认字据最显眼的位置。
+ */
+export function abortTrial(): boolean {
+  if (state.trialId === NO_TRIAL) return false
+  state.trialId = NO_TRIAL
+  state.trialTarget = 0
+  recompute()
+  refreshDisplay()
+  saveGame()
+  return true
+}
+
+/**
+ * 过关结算：记一位、发道基、摘标记。
+ *
+ * 永久加成**不写进任何字段**——`totalBonus()` 从 `trialDone` 位图现推，
+ * 所以读旧档、重复结算都不会把它叠两遍；往后调表里的加成，老档也会自己跟上。
+ *
+ * **不发筑基点**：试炼的准入是结丹 1 层，而结丹之后筑基点本来就有按秒自动进账那条路，
+ * 一笔一次性点数只等于"多挂几分钟"，跟"要用 0.1 倍产出把本世累计爬回来"的代价完全不对等。
+ * 奖励改成永久乘算加成 + 道基，两笔都不随境界贬值（理由见 `TRIALS` 的头注）。
+ *
+ * 道基**只在已结婴时当场发**。结婴之前过的那些不会白丢——`breakIntoYuan()` 会按
+ * `trialDone` 位图把欠的那笔一次补齐（见 `trialDaoJiTotal` 的注释）。
+ */
+export function settleTrial(): boolean {
+  const def = trialAt(state.trialId)
+  if (!def) return false
+  if (!trialMet(state.loopEarned.log10(), state.trialTarget)) return false
+  if (yuanRealmOpen()) {
+    const dao = trialDaoJiOf(def)
+    if (dao > 0) {
+      state.daoJi = roundDao(state.daoJi + dao)
+      state.daoJiEarned = roundDao(state.daoJiEarned + dao)
+    }
+  }
+  state.trialDone = markTrialDone(state.trialDone, state.trialId)
+  state.trialId = NO_TRIAL
+  state.trialTarget = 0
+  recompute()
+  refreshDisplay()
+  saveGame()
+  return true
+}
+
+/**
+ * 还没结婴时，已过的试炼一共欠多少道基——界面念"结婴那一刻补发 N 点"。
+ * 已结婴则恒 0（该发的在 `breakIntoYuan()` 或 `settleTrial()` 里已经发过了）。
+ */
+export function trialDaoJiPending(): number {
+  return yuanRealmOpen() ? 0 : trialDaoJiTotal(state.trialDone)
+}
+
+/** 已完成的道数，界面上念"四道过了几道" */
+export function trialsCleared(): number {
+  return trialDoneCount(state.trialDone)
+}
+
+/* ------------------------------------------------------------------ 元婴 */
+
+/**
+ * 元婴的运行时那一头（0.22 接线）。算式全在 [元婴.ts](./元婴.ts)，这里只负责读写 state。
+ *
+ * 三层门槛，从外到内：
+ *   1. **元婴标签**：结丹 ≥ 1 层（`yuanTabOpen()`）。这一条 0.21 就定了，试炼挂在这张标签下；
+ *   2. **结婴**：累计灵气 ≥ `YUAN_UNLOCK_LOG10`（眼下 1e80，可调），且结丹 ≥ 1 层。
+ *      按下之后 `realmIndex` 推到元婴，炼神 / 神悟台 / 斗法一起开；
+ *   3. **大突破**：本世元神攒到阈值（= K × √(锚 × 1e40)），一次清空换道基。
+ *      它不吃门槛，只吃时间——62 小时是这一层唯一的墙。
+ *
+ * 为什么结婴**不扣灵气、也不散功**：它是一道"修到了就成"的关卡，不是一笔买卖。
+ * 若按 1e80 扣存量，玩家会在门槛前把灵气藏起来不买法门，和结丹、丹炉两条线互相打架；
+ * 而累计灵气只涨不跌，正好是"修到这个份上"的意思。结丹与结婴的分工：
+ * 结丹按层数发产出，结婴只开一扇门。
+ */
+
+/** 神悟台一条的等级：越界与负数一律当 0，界面与结算共用这一个口子 */
+function shenWuLevel(id: string): number {
+  return Math.max(0, Math.floor(Number(state.shenWu[id] ?? 0)))
+}
+
+function fightInsightLevel(id: string): number {
+  return Math.max(0, Math.floor(Number(state.fightInsight[id] ?? 0)))
+}
+
+/**
+ * 神悟台按现价回算一共花了多少道基。读档时用它当"这排等级买不买得起"的闸：
+ * 花掉的比累计挣到的还多，只可能是改过的存档，整排清空比逐个夹回去安全。
+ */
+function shenWuSpent(levels: Record<string, number>): number {
+  let sum = 0
+  for (const def of SHENWU_LINES) {
+    const lv = Math.max(0, Math.floor(Number(levels[def.id] ?? 0)))
+    for (let i = 0; i < lv; i++) sum += shenWuCost(i)
+  }
+  return sum
+}
+
+/**
+ * 元婴本体开没开：`realmIndex` 到没到元婴那一格。
+ * 不再看 `totalEarned`——那是**结婴**的门槛，`breakIntoYuan()` 一旦按下就只认这一个标记，
+ * 否则玩家把灵气花光还会被"退回未开"。
+ */
+export function yuanRealmOpen(): boolean {
+  return state.realmIndex >= YUAN_INDEX
+}
+
+/** 结婴那道门：累计灵气、结丹层数各差多少 */
+export function yuanUnlockGate(): {
+  reached: boolean
+  open: boolean
+  earnedLog10: number
+  needLog10: number
+  need: BigNumber
+  jindan: number
+  jindanNeed: number
+  jindanOk: boolean
+} {
+  const earnedLog10 = state.totalEarned.log10()
+  const jindanNeed = YUAN_GATE_JINDAN_LAYER
+  return {
+    reached: earnedLog10 >= YUAN_UNLOCK_LOG10,
+    open: yuanRealmOpen(),
+    earnedLog10: Number.isFinite(earnedLog10) ? earnedLog10 : 0,
+    needLog10: YUAN_UNLOCK_LOG10,
+    need: BigNumber.fromLog10(YUAN_UNLOCK_LOG10),
+    jindan: state.jindan,
+    jindanNeed,
+    jindanOk: state.jindan >= jindanNeed,
+  }
+}
+
+/**
+ * 结婴。只落一个标记（`realmIndex` 推到元婴那一格）并立刻落盘——
+ * 这一步不改任何资源、不散任何等级，所以不需要字据；按下去唯一的后果就是"从此能炼神"。
+ *
+ * 唯一一笔进项是**试炼欠的道基**：结婴之前过的试炼只发了筑基点，道基记在账上，
+ * 到这一刻按已过的道数一次补齐（四道全过共 35 点）。补发不需要额外的"已结清"标记——
+ * 这个函数开头就挡 `yuanRealmOpen()`，全局只会走一次。
+ */
+export function breakIntoYuan(): boolean {
+  if (yuanRealmOpen()) return false
+  const g = yuanUnlockGate()
+  if (!g.reached || !g.jindanOk) return false
+  state.realmIndex = Math.max(state.realmIndex, YUAN_INDEX)
+  const owed = trialDaoJiTotal(state.trialDone)
+  if (owed > 0) {
+    state.daoJi = roundDao(state.daoJi + owed)
+    state.daoJiEarned = roundDao(state.daoJiEarned + owed)
+  }
+  recompute()
+  refreshDisplay()
+  saveGame()
+  return true
+}
+
+/** 炼神模式的"元神/秒"，已含神炼与斗法分流；log10 一步算完，避免大数先乘再说 */
+function yuanRateLog(): number {
+  if (!yuanRealmOpen()) return -Infinity
+  const log = yuanRateLog10(state.pillAnchor, findYuanMode(state.yuanMode), shenWuLevel('shenLian'))
+  return log + Math.log10(yuanDrainKeepOf())
+}
+
+/** 斗法分走之后还剩几成进元神。没开斗法时一律 1（不分流） */
+function yuanDrainKeepOf(): number {
+  if (!fightUnlocked()) return 1
+  return yuanDrainKeep(findFightMode(state.fightMode))
+}
+
+function yuanRate(): BigNumber {
+  const log = yuanRateLog()
+  return Number.isFinite(log) ? BigNumber.fromLog10(log) : BigNumber.zero()
+}
+
+/** 眼下这一轮的阈值（log10）。锚是只涨不跌的那一个，所以阈值也只涨不跌 */
+function yuanThresholdNow(): number {
+  return yuanThresholdLog10(state.pillAnchor)
+}
+
+/** 斗法开没开：累计道基 ≥ 40，只涨不跌 */
+export function fightUnlocked(): boolean {
+  return state.daoJiEarned >= FIGHT_UNLOCK_TOTAL_DAOJI
+}
+
+/** 每秒战魂。数在 double 里够用：战将封顶 1000 级时一斩也才 1e97 */
+function warSoulPerSecondNow(): number {
+  return warSoulPerSecond(state.general, findFightMode(state.fightMode))
+}
+
+/**
+ * 元神 / 神念 / 战魂按秒进账。三笔一起走，因为它们的来源是同一个"炼神"动作：
+ * 元神是本世主产出，神念是元神宫按秒的香火，战魂是斗法斩出来的。
+ * 只在大突破**之前**累——大突破一按，元神、战魂、战将一起归零。
+ */
+function settleYuan(seconds: number): void {
+  if (!(seconds > 0) || !yuanRealmOpen()) return
+  const rate = yuanRate()
+  if (!rate.isZero) state.yuan = state.yuan.add(rate.mulNumber(seconds))
+  state.shenNian += shenNianPerSecond(state.yuanBuilding) * seconds
+  if (fightUnlocked()) state.warSoul += warSoulPerSecondNow() * seconds
+}
+
+/** 元婴那条面板要的整份账面 */
+export interface YuanState {
+  /** 结婴过没有 */
+  open: boolean
+  mode: YuanModeDef
+  /** 元神存量 */
+  yuan: BigNumber
+  /** 元神/秒（已扣斗法分流） */
+  rate: BigNumber
+  /** 元神/秒（未扣分流），面板上用来对照"斗法分走了多少" */
+  rawRate: BigNumber
+  /** 阈值（log10 与 BigNumber 两个口径都给，界面念哪个都行） */
+  thresholdLog10: number
+  threshold: BigNumber
+  /** 0..1，按 log 比例；线性比例在几十个数量级上永远贴着 0 */
+  progress: number
+  /** 到 1× 阈值还要多少秒 */
+  etaSeconds: number
+  /** 现在破能拿多少道基（未到线是 0） */
+  gain: number
+  breaks: number
+  auto: number
+  autoUnlocked: boolean
+  /** 斗法分走的比例，0 表示没开斗法 */
+  drain: number
+  /** 正在试炼里：大突破那一按会封着（它会把试炼进度一起清零） */
+  trialOn: boolean
+  daoJi: number
+  daoJiEarned: number
+  shenNian: number
+  building: number
+  buildingCost: number
+  buildingIncome: number
+  anchorLog: number
+}
+
+export function yuanState(): YuanState {
+  const mode = findYuanMode(state.yuanMode)
+  const open = yuanRealmOpen()
+  const thresholdLog10 = yuanThresholdNow()
+  const nowLog = state.yuan.log10()
+  const rate = yuanRate()
+  const rateLog = rate.log10()
+  const dongMing = shenWuLevel('dongMing')
+  const reached = Number.isFinite(nowLog) && nowLog >= thresholdLog10
+  // 元气为 0 时 log10 是 -Infinity：进度按 0 算，ETA 改成"从零攒到阈值"，
+  // 否则 阈值 − (−∞) 会把等待时间算成无穷，面板上永远显示"这一世等不到"
+  const from = Number.isFinite(nowLog) ? nowLog : -Infinity
+  const gap = Number.isFinite(from) ? thresholdLog10 - from : thresholdLog10
+  const etaSeconds =
+    !open || !Number.isFinite(rateLog)
+      ? Infinity
+      : gap <= 0
+        ? 0
+        : Math.pow(10, Math.min(gap - rateLog, 300))
+  return {
+    open,
+    mode,
+    yuan: state.yuan,
+    rate,
+    rawRate: Number.isFinite(rateLog + Math.log10(yuanDrainKeepOf()))
+      ? BigNumber.fromLog10(rateLog + Math.log10(yuanDrainKeepOf()))
+      : BigNumber.zero(),
+    thresholdLog10,
+    threshold: BigNumber.fromLog10(thresholdLog10),
+    progress: open && Number.isFinite(from) ? Math.min(Math.max(from / thresholdLog10, 0), 1) : 0,
+    etaSeconds,
+    gain: reached ? yuanDaoGainLog10(nowLog, thresholdLog10, dongMing) : 0,
+    breaks: state.yuanBreaks,
+    auto: state.yuanAuto,
+    autoUnlocked: autoBreakUnlocked(state.yuanBreaks),
+    drain: open ? 1 - yuanDrainKeepOf() : 0,
+    trialOn: state.trialId !== NO_TRIAL,
+    daoJi: state.daoJi,
+    daoJiEarned: state.daoJiEarned,
+    shenNian: state.shenNian,
+    building: state.yuanBuilding,
+    buildingCost: yuanBuildingCost(state.yuanBuilding),
+    buildingIncome: shenNianPerSecond(state.yuanBuilding),
+    anchorLog: state.pillAnchor,
+  }
+}
+
+/** 换炼神档位。三档只是"每秒产出怎么分"，随时可换，不动任何存量 */
+export function setYuanMode(id: YuanModeId): void {
+  if (state.yuanMode === id) return
+  state.yuanMode = id
+  recompute()
+  refreshDisplay()
+}
+
+/** 自动大突破：0 = 关；1/2/5/10 = 等到阈值几倍再破。未解锁时拨不动 */
+export function setYuanAuto(trigger: number): void {
+  if (!autoBreakUnlocked(state.yuanBreaks)) return
+  state.yuanAuto = normalizeYuanAuto(trigger)
+  refreshDisplay()
+}
+
+function roundDao(n: number): number {
+  if (!Number.isFinite(n)) return 0
+  return Math.round(n * 100) / 100
+}
+
+/** 自动器每秒看一眼：过线就破，没到线什么都不做 */
+function runAutoYuanBreak(): void {
+  if (!state.yuanAuto || !yuanRealmOpen()) return
+  const th = yuanThresholdNow()
+  if (!shouldAutoBreak(state.yuanBreaks, true, state.yuan.log10(), th, state.yuanAuto as AutoBreakTrigger)) return
+  yuanBreak()
+}
+
+/**
+ * 大突破：元婴这一层的"结丹"。散掉的是**本世那一层**——元神、战魂、战将、灵气、丹、废渣、
+ * 练气法门全清，换回一笔跨世道基（`2.8 × 超出阈值的倍数`，再乘洞明）。
+ *
+ * 丹炉三条线与火候**不清**，这一点与 §11.2 的设计稿不同，理由写在 `GAME_NUMBERS.md`：
+ * 丹炉的价挂在 `pillAnchor` 上（只涨不跌），把等级清了而锚留着，等于把价格留在旧流量、
+ * 把产量打回起手，第一口炉子要等上几天——那不是重置，是软锁。丹炉和根骨一样，
+ * 属于"上一层已经付过代价的家当"，散的是修行与炼神这一层。
+ */
+export function yuanBreak(): boolean {
+  if (!yuanRealmOpen()) return false
+  // 试炼期间封着：大突破会把本世累计清零，而试炼的目标正是"把本世累计爬回原处"。
+  // 没这一条的话，一次自动大突破就能顺手把玩家的试炼进度抹掉——和破境封着是同一个道理
+  if (state.trialId !== NO_TRIAL) return false
+  const th = yuanThresholdNow()
+  const now = state.yuan.log10()
+  if (!(now >= th)) return false
+  const gain = yuanDaoGainLog10(now, th, shenWuLevel('dongMing'))
+  state.yuan = BigNumber.zero()
+  state.warSoul = 0
+  state.general = 0
+  state.spirit = BigNumber.zero()
+  state.loopEarned = BigNumber.zero()
+  state.loopBanked = 0
+  state.levels = {}
+  state.dan = BigNumber.zero()
+  state.dreg = BigNumber.zero()
+  gatherAcc = 0
+  state.gatherProgress = 0
+  danAcc = 0
+  state.pillProgress = 0
+  yuanAcc = 0
+  state.daoJi = roundDao(state.daoJi + gain)
+  state.daoJiEarned = roundDao(state.daoJiEarned + gain)
+  state.yuanBreaks += 1
+  recompute()
+  refreshDisplay()
+  saveGame()
+  return true
+}
+
+/** 元神宫：花神念升一级，每级多产 15% 神念。Lv.0 也产 0.05/秒，否则第一级永远买不起 */
+export function buyYuanBuilding(): boolean {
+  if (!yuanRealmOpen()) return false
+  const cost = yuanBuildingCost(state.yuanBuilding)
+  if (!Number.isFinite(cost) || state.shenNian < cost) return false
+  state.shenNian -= cost
+  state.yuanBuilding += 1
+  refreshDisplay()
+  return true
+}
+
+/* ---------------------------------------------------------- 神悟台 */
+
+/** 一条线当前/下一级念成大白话。界面只负责摆，不再自己算一遍 */
+function shenWuText(def: ShenWuLineDef, level: number): string {
+  if (level <= 0) return '尚未参悟'
+  if (def.kind === 'yuan') return `元神 +${Math.round(def.power * level * 100)}%`
+  if (def.kind === 'daoji') return `道基 +${Math.round(def.power * level * 100)}%`
+  if (def.kind === 'meta') {
+    const mul = (1 + def.power) ** level
+    return `元道总倍率 ×${mul < 1000 ? mul.toFixed(2) : fmtNum(mul)}`
+  }
+  if (def.kind === 'dregMul' || def.kind === 'passMul') return `×${((1 + def.power) ** level).toFixed(2)}`
+  return `+${Math.round(def.power * level * 100)}%`
+}
+
+export interface ShenWuRow {
+  def: ShenWuLineDef
+  level: number
+  cost: number
+  affordable: boolean
+  current: string
+  next: string
+  maxed: boolean
+}
+
+export function shenWuRows(): ShenWuRow[] {
+  return SHENWU_LINES.map((def) => {
+    const level = shenWuLevel(def.id)
+    // 价格在 1e300 之上就没有意义了，按"摸不到"处理
+    const cost = shenWuCost(level)
+    return {
+      def,
+      level,
+      cost,
+      affordable: Number.isFinite(cost) && state.daoJi >= cost,
+      current: shenWuText(def, level),
+      next: shenWuText(def, level + 1),
+      maxed: !Number.isFinite(cost),
+    }
+  })
+}
+
+/** 点一级神悟台。道基只从大突破来，所以这里只有"一级"一种买法，也没有自动化 */
+export function buyShenWu(id: string): boolean {
+  if (!yuanRealmOpen()) return false
+  const def = SHENWU_LINES.find((d) => d.id === id)
+  if (!def) return false
+  const level = shenWuLevel(id)
+  const cost = shenWuCost(level)
+  if (!Number.isFinite(cost) || state.daoJi < cost) return false
+  state.daoJi = roundDao(state.daoJi - cost)
+  state.shenWu[id] = level + 1
+  recompute()
+  refreshDisplay()
+  return true
+}
+
+/* ---------------------------------------------------------- 斗法 */
+
+export interface FightState {
+  unlocked: boolean
+  /** 累计道基，解锁那 40 点看的是它 */
+  daoJiEarned: number
+  need: number
+  mode: FightModeDef
+  warSoul: number
+  general: number
+  /** 眼下能斩到第几波 */
+  wave: number
+  /** 一刀给多少战魂 */
+  perKill: number
+  /** 每秒战魂（已含档位倍率） */
+  perSecond: number
+  generalCost: number
+  /** 从元神里分走的比例 */
+  drain: number
+  /** 手上神念（战悟花的就是它） */
+  shenNian: number
+}
+
+export function fightState(): FightState {
+  const mode = findFightMode(state.fightMode)
+  const unlocked = fightUnlocked()
+  return {
+    unlocked,
+    daoJiEarned: state.daoJiEarned,
+    need: FIGHT_UNLOCK_TOTAL_DAOJI,
+    mode,
+    warSoul: state.warSoul,
+    general: state.general,
+    wave: fightWaveCap(state.general),
+    perKill: warSoulPerKill(fightWaveCap(state.general)),
+    perSecond: unlocked ? warSoulPerSecondNow() : 0,
+    generalCost: generalCost(state.general),
+    drain: unlocked ? mode.yuanDrain : 0,
+    shenNian: state.shenNian,
+  }
+}
+
+export function setFightMode(id: FightModeId): void {
+  if (!fightUnlocked() || state.fightMode === id) return
+  state.fightMode = id
+  recompute()
+  refreshDisplay()
+}
+
+/** 战将封顶：再往上 `1.65^级` 会溢出成 Infinity，收在 1000 级正好让价目表停在有限的墙上 */
+const GENERAL_CEILING = 1000
+
+/** 花战魂升一级战将：每级多斩一波 */
+export function buyGeneral(): boolean {
+  if (!fightUnlocked() || state.general >= GENERAL_CEILING) return false
+  const cost = generalCost(state.general)
+  if (!Number.isFinite(cost) || state.warSoul < cost) return false
+  state.warSoul -= cost
+  state.general += 1
+  refreshDisplay()
+  return true
+}
+
+export interface FightInsightRow {
+  def: ShenWuLineDef
+  level: number
+  cost: number
+  affordable: boolean
+  current: string
+  next: string
+}
+
+export function fightInsightRows(): FightInsightRow[] {
+  return FIGHT_INSIGHT_LINES.map((def) => {
+    const level = fightInsightLevel(def.id)
+    const cost = fightInsightCost(level)
+    const text = (lv: number) => {
+      if (lv <= 0) return '尚未参悟'
+      if (def.kind === 'dregMul' || def.kind === 'passMul') return `×${((1 + def.power) ** lv).toFixed(2)}`
+      return `+${Math.round(def.power * lv * 100)}%`
+    }
+    return {
+      def,
+      level,
+      cost,
+      affordable: Number.isFinite(cost) && state.shenNian >= cost,
+      current: text(level),
+      next: text(level + 1),
+    }
+  })
+}
+
+/** 战悟花的是神念（元神宫产的），不是战魂——战魂只买战将，两条货币不串 */
+export function buyFightInsight(id: string): boolean {
+  if (!fightUnlocked()) return false
+  const def = FIGHT_INSIGHT_LINES.find((d) => d.id === id)
+  if (!def) return false
+  const level = fightInsightLevel(id)
+  const cost = fightInsightCost(level)
+  if (!Number.isFinite(cost) || state.shenNian < cost) return false
+  state.shenNian -= cost
+  state.fightInsight[id] = level + 1
+  recompute()
+  refreshDisplay()
+  return true
+}
+
 /**
  * 测试用的一键补灵气：把灵气灌到下一个破境线（没有可破的境界就翻一千倍）。
  * 只为跳过挂机去看后面的界面，正式玩法用不上。
@@ -1809,6 +2729,52 @@ export function devAddDan(n = 100): void {
 }
 
 /**
+ * 测试用：把账推到结婴门槛并直接结婴。
+ * 正式玩法里这一下要攒 1e80 累计灵气，测试页不该让人真去挂一晚上。
+ */
+export function devUnlockYuan(): void {
+  const need = BigNumber.fromLog10(YUAN_UNLOCK_LOG10)
+  if (state.totalEarned.log10() < YUAN_UNLOCK_LOG10) earn(need.sub(state.totalEarned))
+  if (state.jindan < YUAN_GATE_JINDAN_LAYER) state.jindan = YUAN_GATE_JINDAN_LAYER
+  state.realmIndex = Math.max(state.realmIndex, JINDAN_INDEX)
+  recompute()
+  breakIntoYuan()
+  refreshDisplay()
+}
+
+/** 测试用：把元神灌到这一轮阈值（1×），用来验证大突破与神悟台。
+ * 结婴没开就什么都不做——元神本来就是元婴那一层的资源，没有"没结婴先有元神"这种状态。
+ */
+export function devFillYuan(): void {
+  if (!yuanRealmOpen()) return
+  const target = BigNumber.fromLog10(yuanThresholdNow())
+  if (target.gt(state.yuan)) state.yuan = target
+  refreshDisplay()
+}
+
+/** 测试用：白给道基，用来验神悟台八条买满后的落点 */
+export function devAddDaoJi(n = 10): void {
+  if (!(n > 0)) return
+  state.daoJi = roundDao(state.daoJi + n)
+  state.daoJiEarned = roundDao(state.daoJiEarned + n)
+  refreshDisplay()
+}
+
+/** 测试用：白给神念，用来验元神宫与战悟 */
+export function devAddShenNian(n = 100): void {
+  if (!(n > 0)) return
+  state.shenNian += n
+  refreshDisplay()
+}
+
+/** 测试用：白给战魂，用来验战将那一列 */
+export function devAddWarSoul(n = 100): void {
+  if (!(n > 0)) return
+  state.warSoul += n
+  refreshDisplay()
+}
+
+/**
  * 存档码写成**定长数组**，键名一个都不落：位置就是字段名。摊平后转 base64，
  * 浏览器本地存的那份和导出给玩家的那份是同一个东西。
  *
@@ -1822,6 +2788,10 @@ export function devAddDan(n = 100): void {
  *   [27] 筑基点零头（按秒折算攒下的那不足 1 点，四位小数）
  *   [28] 废渣存量 [29] 抽过的次数 [30] 七道丹道精神等级 [31] 火候档位下标
  *   [32] 丹纹四枝等级（按 JINDAN_TREE 的顺序摆）
+ *   [33] 试炼下标 [34] 试炼目标 [35] 试炼位图（0.20）
+ *   [36] 元神 [37] 道基 [38] 累计道基 [39] 神念 [40] 元神宫等级 [41] 神悟台八条等级
+ *   [42] 炼神档位 [43] 大突破次数 [44] 战魂 [45] 战将等级 [46] 斗法档位 [47] 战悟五条等级
+ *   [48] 自动大突破倍率（0 = 关）（0.22）
  *
  * 键名占掉快一半长度，所以新字段**只往后加、别插队**——位置就是格式，插中间等于把所有存档读坏。
  *
@@ -1829,8 +2799,11 @@ export function devAddDan(n = 100): void {
  * v15 再收一次口：v14 及更早一律全关——v14 曾短暂存在过"根骨/鉴宝台拆开但读档还没收开关"的档，
  * 玩家手里可能已经导出过那种码，所以再给一版一次性归零；自动保存那一位照旧保留。
  * v16 加丹纹四枝 [32]；点数不存（按结丹层数与里程碑现算），老档读进来四枝全空。
+ * v17 加试炼三格 [33]~[35]；老档读到 undefined 就是"没试炼"。
+ * v18 加元婴十三格 [36]~[48]；老档全部读成 0 / 空表 / 守神 / 守御 / 关，
+ *      `realmIndex` 也已经夹在 0..8，所以老档不会凭空多出元婴进度（结婴仍要自己按）。
  */
-const SAVE_VERSION = 16
+const SAVE_VERSION = 18
 
 /** 读档用的键控结构：定长数组解出来就是这个形状 */
 interface SaveData {
@@ -1865,6 +2838,38 @@ interface SaveData {
   jindanTree: Record<string, number>
   /** 定价锚：见过的最高灵气/秒。老存档没这一栏，读进来由 recompute() 按当前流量补 */
   pillAnchor: number
+  /** 正在进行的试炼下标；-1 = 不在试炼里。老存档没这一栏，读进来就是 -1 */
+  trialId: number
+  /** 这一局试炼的目标（log10 本世累计）。只在局中有效 */
+  trialTarget: number
+  /** 已完成的试炼位图 */
+  trialDone: number
+  /** 元神存量（本世）。老档读成 0 */
+  yuan: [number, number]
+  /** 元婴道基（跨世，两位小数） */
+  daoJi: number
+  /** 累计道基（只涨不跌） */
+  daoJiEarned: number
+  /** 神念 */
+  shenNian: number
+  /** 元神宫等级 */
+  yuanBuilding: number
+  /** 神悟台八条 */
+  shenWu: Record<string, number>
+  /** 炼神档位 */
+  yuanMode: YuanModeId
+  /** 大突破次数（只涨不跌） */
+  yuanBreaks: number
+  /** 战魂（本世） */
+  warSoul: number
+  /** 战将等级（本世） */
+  general: number
+  /** 斗法档位 */
+  fightMode: FightModeId
+  /** 战悟五条 */
+  fightInsight: Record<string, number>
+  /** 自动大突破倍率，0 = 关 */
+  yuanAuto: number
   seed: number
   totalGathers: number
   totalTime: number
@@ -1939,6 +2944,22 @@ function snapshot(): SaveData {
     jindan: state.jindan,
     jindanTree: { ...state.jindanTree },
     pillAnchor: state.pillAnchor,
+    trialId: state.trialId,
+    trialTarget: state.trialTarget,
+    trialDone: state.trialDone,
+    yuan: toParts(state.yuan),
+    daoJi: state.daoJi,
+    daoJiEarned: state.daoJiEarned,
+    shenNian: state.shenNian,
+    yuanBuilding: state.yuanBuilding,
+    shenWu: { ...state.shenWu },
+    yuanMode: state.yuanMode,
+    yuanBreaks: state.yuanBreaks,
+    warSoul: state.warSoul,
+    general: state.general,
+    fightMode: state.fightMode,
+    fightInsight: { ...state.fightInsight },
+    yuanAuto: state.yuanAuto,
     seed: state.seed,
     totalGathers: state.totalGathers,
     totalTime: state.totalTime,
@@ -1990,13 +3011,63 @@ function toCode(d: SaveData): (number | number[])[] {
     encodeLevels(SPIRITS, d.spirits),
     PILL_MODES.findIndex((m) => m.id === d.pillMode),
     encodeLevels(JINDAN_TREE, d.jindanTree),
+    // 0.20 起往末尾追加：v16 的老档读到这三格就是 undefined，fromCode 按"没试炼"兜底
+    d.trialId,
+    Math.round(d.trialTarget * 1e4) / 1e4,
+    d.trialDone,
+    // 0.22 起再往末尾追加十三格：元婴那一层
+    d.yuan,
+    Math.round(d.daoJi * 100) / 100,
+    Math.round(d.daoJiEarned * 100) / 100,
+    Math.round(d.shenNian * 100) / 100,
+    Math.floor(d.yuanBuilding),
+    encodeLevels(SHENWU_LINES, d.shenWu),
+    yuanModeIndex(d.yuanMode),
+    Math.floor(d.yuanBreaks),
+    d.warSoul,
+    Math.floor(d.general),
+    fightModeIndex(d.fightMode),
+    encodeLevels(FIGHT_INSIGHT_LINES, d.fightInsight),
+    normalizeYuanAuto(d.yuanAuto),
   ]
+}
+
+/**
+ * 试炼下标只可能是 -1..TRIALS.length-1；越界一律当"不在试炼里"。
+ * 不做夹回边界：夹成最后一道会让一个坏档凭空多出一场没打过的试炼。
+ */
+function clampTrialIndex(raw: number): number {
+  const i = Math.floor(Number(raw))
+  return i >= 0 && i < TRIALS.length ? i : NO_TRIAL
+}
+
+/** 位图只留 TRIALS 里真有的那几位，删过试炼的老档不会留下幽灵完成记录 */
+function clampTrialBits(raw: number): number {
+  const n = Math.floor(Number(raw))
+  if (!Number.isFinite(n) || n <= 0) return 0
+  const mask = (1 << TRIALS.length) - 1
+  return n & mask
 }
 
 /** 下标越界（改了档位表顺序的老存档码）就回到默认档 */
 function at<T>(table: readonly T[], index: unknown, fallback: T): T {
   const i = Math.floor(Number(index))
   return i >= 0 && i < table.length ? table[i] : fallback
+}
+
+/**
+ * 存档里的普通数：缺位、NaN、Infinity 一律回到 fallback。
+ * 元婴那几笔（道基/神念/战魂）都是 double 账，一个被改坏的 `Infinity` 会让
+ * "战将 1000 级"这种上限形同虚设，所以在这里就拦住，而不是指望调用方记得判。
+ */
+function safeNum(raw: unknown, fallback = 0): number {
+  const n = Number(raw)
+  return Number.isFinite(n) ? n : fallback
+}
+
+/** 非负数：`safeNum` 之后再夹掉负号 */
+function safeCount(raw: unknown, fallback = 0): number {
+  return Math.max(0, safeNum(raw, fallback))
 }
 
 /** 定长数组收回存档对象。缺位的字段一律按"没有"处理，不接受 NaN */
@@ -2027,6 +3098,24 @@ function fromCode(a: unknown[]): Partial<SaveData> {
     pulls: Math.max(0, Math.floor(Number(a[29])) || 0),
     spirits: decodeLevels(SPIRITS, a[30]),
     pillMode: at(PILL_MODES, a[31], PILL_MODES[1]).id,
+    // v17 起的三格。老档读到的是 undefined：下标认 -1、目标 0、位图 0，等于"没试炼"
+    trialId: a[33] === undefined ? NO_TRIAL : clampTrialIndex(Number(a[33])),
+    trialTarget: Math.max(0, Number(a[34]) || 0),
+    trialDone: clampTrialBits(Number(a[35]) || 0),
+    // v18 起的十三格。老档全是 undefined：0 / 空表 / 守神 / 守御 / 关
+    yuan: a[36] as [number, number],
+    daoJi: safeCount(a[37]),
+    daoJiEarned: safeCount(a[38]),
+    shenNian: safeCount(a[39]),
+    yuanBuilding: Math.floor(safeCount(a[40])),
+    shenWu: decodeLevels(SHENWU_LINES, a[41]),
+    yuanMode: yuanModeAt(a[42]).id,
+    yuanBreaks: Math.floor(safeCount(a[43])),
+    warSoul: safeCount(a[44]),
+    general: Math.floor(safeCount(a[45])),
+    fightMode: fightModeAt(a[46]).id,
+    fightInsight: decodeLevels(FIGHT_INSIGHT_LINES, a[47]),
+    yuanAuto: normalizeYuanAuto(a[48]),
     seed: Math.floor(Number(a[10])) || 0,
     totalGathers: Math.max(0, Math.floor(Number(a[11])) || 0),
     totalTime: Math.max(0, Number(a[12]) || 0),
@@ -2091,6 +3180,28 @@ function applySave(d: Partial<SaveData>): boolean {
   if (treeSpent(state.jindanTree) > jindanTreeEarned()) state.jindanTree = {}
   // 定价锚取"存档里的"和"当前流量"的较大者：老存档没这一栏，读档那次 recompute 会把它补上
   state.pillAnchor = Math.max(0, d.pillAnchor ?? 0)
+  // 试炼：下标夹回合法区间，位图只认 TRIALS 里真有的那几位
+  state.trialId = clampTrialIndex(d.trialId ?? NO_TRIAL)
+  state.trialTarget = Math.max(0, d.trialTarget ?? 0)
+  state.trialDone = clampTrialBits(d.trialDone ?? 0)
+  // 元婴：老档没这十三栏，全部按"还没结婴"的默认值落
+  state.yuan = fromParts(d.yuan)
+  state.daoJi = roundDao(safeCount(d.daoJi))
+  // 累计道基不可能少于手上的：成就与斗法门槛不能被改过的存档绕过下限
+  state.daoJiEarned = Math.max(roundDao(safeCount(d.daoJiEarned)), state.daoJi)
+  state.shenNian = roundDao(safeCount(d.shenNian))
+  state.yuanBuilding = Math.floor(safeCount(d.yuanBuilding))
+  state.shenWu = d.shenWu ?? {}
+  // 神悟台按现算的道基收口：花掉的比挣到的多，只可能是改过的档，整排清空（和丹纹同一条规矩）
+  if (shenWuSpent(state.shenWu) > state.daoJiEarned) state.shenWu = {}
+  state.yuanMode = findYuanMode(d.yuanMode as YuanModeId).id
+  state.yuanBreaks = Math.floor(safeCount(d.yuanBreaks))
+  state.warSoul = safeCount(d.warSoul)
+  state.general = Math.floor(safeCount(d.general))
+  state.fightMode = findFightMode(d.fightMode as FightModeId).id
+  state.fightInsight = d.fightInsight ?? {}
+  // 自动大突破没解锁就一律归零：旧档/改过的档不该自己跑起来
+  state.yuanAuto = autoBreakUnlocked(state.yuanBreaks) ? normalizeYuanAuto(d.yuanAuto) : 0
   // 种子是 0 就重开一串，别让 xorshift 卡在不动的零上
   state.seed = d.seed || freshSeed()
   state.points = d.points ?? 0
@@ -2105,11 +3216,23 @@ function applySave(d: Partial<SaveData>): boolean {
   state.savedAt = d.savedAt ?? 0
   // 读档那一刻把墙钟起点挪到"现在"：贴进来的存档里那个时间戳是别人家的闭关，
   // 不能顺手当成离线收益发给玩家。真正该补的那一段由 bootGameLoop 自己认。
+  // 老档自愈：0.22 之前结婴的档，试炼那道基还没发过（当时还没有这一项）。
+  // 判据是"累计道基还不够试炼欠的那笔"——结婴补发会把 daoJiEarned 一起抬到 ≥ 欠账，
+  // 所以发过的档不会重复；补完再读一次也还是 0。
+  if (state.realmIndex >= YUAN_INDEX) {
+    const owed = trialDaoJiTotal(state.trialDone)
+    if (owed > 0 && state.daoJiEarned < owed) {
+      const gap = roundDao(owed - state.daoJiEarned)
+      state.daoJi = roundDao(state.daoJi + gap)
+      state.daoJiEarned = roundDao(state.daoJiEarned + gap)
+    }
+  }
   lastReal = Date.now()
   gatherAcc = 0
   state.gatherProgress = 0
   danAcc = 0
   state.pillProgress = 0
+  yuanAcc = 0
   recompute()
   // 门槛没到的自动化开关一律关掉：旧档读进来不该自己跑起来
   syncAutomationSettings()
@@ -2230,6 +3353,7 @@ export function resetGame(): void {
   Object.assign(state, freshState(), { settings })
   gatherAcc = 0
   danAcc = 0
+  yuanAcc = 0
   lastReal = Date.now()
   offlineReport.value = null
   recompute()
@@ -2246,6 +3370,12 @@ let autoSaveTimer = 0
 let gatherAcc = 0
 /** 本次炼丹已走的秒数，满 PILL_PERIOD 结算一次丹 */
 let danAcc = 0
+/**
+ * 本次炼神已走的秒数，满 `YUAN_PERIOD` 结算一次元神/神念/战魂。
+ * 元神/秒动辄 1e45，每帧走一次 BigNumber 加法没有意义；按整秒落账，面板上的速率仍是连续的。
+ */
+let yuanAcc = 0
+const YUAN_PERIOD = 1
 /** 本次折算已走的秒数，满 POINT_PERIOD 落一次筑基点 */
 let pointAcc = POINT_PERIOD
 /** 自动购买攒下的游戏时间。敏手会把这个间隔除短，除到底见 AUTO_BUY_MIN_INTERVAL */
@@ -2265,6 +3395,10 @@ function buyStep(): number {
  * 丹一炉一炉结算：每 PILL_PERIOD 秒出一炉，每一炉按火候的炸炉概率掷一次。
  * 炸了那一炉的丹一分不得，改按「这一炉该出的丹」折成废渣（词条 `PILL_MODES` 的 dregMult）。
  * 丹炉没开张就一炉不炼——省得攒出一炉没人看得见的丹，也把"解锁那一刻补一大笔"这条路堵掉。
+ *
+ * 炼神三档的"渣留存"在这里扣：`danPerSecond` 已经是乘过 `danKeep` 的数（面板念的就是它），
+ * 而渣要以**没被扣过的丹**为底，所以先把 `danKeep` 除掉、再乘 `dregKeep`——
+ * 否则守神（0.9 × 0.9）会变成扣两遍，夺舍更会扣成 0.2 × 0.15。
  */
 function settlePillBatches(cycles: number): void {
   const mode = findPillMode(state.pillMode)
@@ -2276,9 +3410,16 @@ function settlePillBatches(cycles: number): void {
   if (busts > 0)
     state.dreg = state.dreg.add(
       state.danPerSecond.mulNumber(
-        PILL_PERIOD * dregYieldMult(mode, state.spirits) * dregBonusMult(activeBonus()) * busts,
+        PILL_PERIOD * dregYieldMult(mode, state.spirits) * dregBonusMult(activeBonus()) * busts * dregKeepScale(),
       ),
     )
+}
+
+/** 渣留存的换算系数：把 `danPerSecond` 里已经扣掉的 `danKeep` 补回去，换成 `dregKeep` */
+function dregKeepScale(): number {
+  if (!yuanRealmOpen()) return 1
+  const m = findYuanMode(state.yuanMode)
+  return m.danKeep > 0 ? m.dregKeep / m.danKeep : m.dregKeep
 }
 /** 上一次结过账的墙钟时刻（毫秒）。闭关那一段就是从这里数到"现在" */
 let lastReal = Date.now()
@@ -2360,6 +3501,10 @@ export function settleOffline(seconds: number): OfflineReport {
       pointAcc = 0
     }
   }
+  // 炼神那三笔（元神 / 神念 / 战魂）照补，但**自动大突破不离线跑**：
+  // 闭关是"人不在"，按一下重置不该由一个没人在场的自动器替玩家决定（§11.11）。
+  // 所以这里只累加，回来后玩家自己看进度条、自己按。
+  settleYuan(rep.seconds)
   return rep
 }
 
@@ -2434,6 +3579,20 @@ function tick(now: number): void {
       state.totalGathers += cycles
     }
     state.gatherProgress = gatherAcc / period
+    // 试炼过关就当场结算：目标只看本世累计，刚 earn 完这一刻最准。
+    // 没到线时 settleTrial 自己会挡回来，每帧的代价只是两次比较
+    if (state.trialId !== NO_TRIAL) settleTrial()
+    // 炼神：满一秒落一次元神 / 神念 / 战魂，顺手看一眼自动器
+    if (yuanRealmOpen()) {
+      yuanAcc += dt
+      if (yuanAcc >= YUAN_PERIOD) {
+        settleYuan(yuanAcc)
+        yuanAcc = 0
+        runAutoYuanBreak()
+      }
+    } else {
+      yuanAcc = 0
+    }
     // 丹按出丹速率一炉一炉结算，独立于吐纳那一格。丹炉没开张就一炉不炼，
     // 免得攒出一炉子没人看得见的丹，也把"解锁那一刻补一大笔"这条路堵掉
     if (pillUnlocked()) {

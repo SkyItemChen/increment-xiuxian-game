@@ -14,6 +14,8 @@ import {
   type MilestoneDef,
 } from './词条与属性'
 import type { SpiritLevels } from './凝练'
+import { trialBonus } from './试炼'
+import { FIGHT_INSIGHT_LINES, SHENWU_LINES, type ShenWuKind } from './元婴'
 
 /**
  * 挑战、结丹里程碑、加属性成就，再加丹纹四枝——合起来的一本账。
@@ -52,6 +54,12 @@ export interface BonusCounters {
   playMinutes: number
   /** 丹纹四枝的等级。丹纹是玩家花点数点出来的，不在这三张表的累计账里 */
   jindanTree?: Record<string, number>
+  /** 已完成的试炼位图。试炼是一次性赌局，过了就永久记一位 */
+  trialDone?: number
+  /** 神悟台八条的等级。玩家花元婴道基点的，和丹纹一样属于"亲手点的选择" */
+  shenWu?: Record<string, number>
+  /** 斗战胜悟五条的等级。花神念买的永久加成 */
+  fightInsight?: Record<string, number>
 }
 
 /** 成就看的那笔账如今是多少；qi 那一笔走 log10，由 `achievementUnlocked` 自己分派 */
@@ -98,6 +106,45 @@ export function milestoneUnlocked(def: MilestoneDef, c: BonusCounters): boolean 
 }
 
 /**
+ * 元婴那两张表的加法/乘法落点。
+ *
+ * 为什么放在这里而不是 `元婴.ts`：`词条与属性.ts` 反过来 import 了
+ * `YUAN_GATE_JINDAN_LAYER`（试炼门槛要跟元婴页同一个数），元婴再 import 回去就成环了；
+ * `挑战.ts` 本来就是"把各表折进 `Bonus`"的唯一收口处，摆在这儿正合适。
+ *
+ * 只折**映射到旧五轴**的那几条：神炼（元神产量）、洞明（道基）、元道（metaMult）
+ * 三条是元婴自己的轴，由 `state.ts` 直接读等级，不进这本账。
+ */
+function foldYuanLine(b: Bonus, kind: ShenWuKind, power: number, level: number): void {
+  if (kind === 'danAdd') b.danAdd = (b.danAdd ?? 0) + power * level
+  else if (kind === 'qiAdd') b.qiAdd = (b.qiAdd ?? 0) + power * level
+  else if (kind === 'energyAdd') b.energyAdd = (b.energyAdd ?? 0) + power * level
+  // 乘法轴按"每级 ×(1+power)"连乘，不是加法：表里写 ×1.05 就是 ×1.05^级
+  else if (kind === 'dregMul') b.dregMul = (b.dregMul ?? 1) * Math.pow(1 + power, level)
+  else if (kind === 'passMul') b.passMul = (b.passMul ?? 1) * Math.pow(1 + power, level)
+}
+
+function yuanLevels(lines: { id: string; kind: ShenWuKind; power: number }[], levels: Record<string, number>): Bonus {
+  const b = noBonus()
+  for (const def of lines) {
+    const lv = Math.max(0, Math.floor(levels[def.id] ?? 0))
+    if (!lv) continue
+    foldYuanLine(b, def.kind, def.power, lv)
+  }
+  return b
+}
+
+/** 神悟台折回旧五轴的那五条（丹心 / 返哺 / 玄功 / 聚渣 / 息行） */
+export function shenWuBonus(levels: Record<string, number>): Bonus {
+  return yuanLevels(SHENWU_LINES, levels)
+}
+
+/** 斗战胜悟的五条，全部映射旧五轴；量比神悟台小，因为神念到后期很宽 */
+export function fightInsightBonus(levels: Record<string, number>): Bonus {
+  return yuanLevels(FIGHT_INSIGHT_LINES, levels)
+}
+
+/**
  * 三张表 + 丹纹四枝合起来的加成。达成几条就添几笔，没达成的连 0 都不添。
  * 丹纹是玩家亲手点的永久等级，所以它不进 `JINDAN_MILESTONES` 那种按层数推导的表，
  * 而是在这里和另外三张表并进同一本账——产出公式只认 `activeBonus()`，不另开私房倍率。
@@ -107,6 +154,11 @@ export function totalBonus(c: BonusCounters): Bonus {
   for (const def of CHALLENGES) if (challengeUnlocked(def, c)) sum = addBonus(sum, def.bonus)
   for (const def of JINDAN_MILESTONES) if (milestoneUnlocked(def, c)) sum = addBonus(sum, def.bonus)
   for (const def of ACHIEVEMENTS) if (def.bonus && achievementUnlocked(def, c)) sum = addBonus(sum, def.bonus)
+  // 试炼那几笔是一次性的永久加成，和上面三张表并进同一本账，不新起第六条轴
+  sum = addBonus(sum, trialBonus(c.trialDone ?? 0))
+  // 元婴的神悟台与斗战胜悟也照这条规矩并进同一本账
+  sum = addBonus(sum, shenWuBonus(c.shenWu ?? {}))
+  sum = addBonus(sum, fightInsightBonus(c.fightInsight ?? {}))
   const tree = c.jindanTree ?? {}
   const treeBonus = noBonus()
   for (const def of JINDAN_TREE) {

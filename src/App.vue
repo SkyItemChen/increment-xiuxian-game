@@ -13,7 +13,11 @@ import { bootGameLoop, state, stopGameLoop } from './game/state'
 onMounted(bootGameLoop)
 onUnmounted(stopGameLoop)
 
-/** 设置、自动化、成就、日志、测试各是一整页。修行画面留着不销毁，回来时还站在原来那个境界标签上 */
+/**
+ * 设置、自动化、成就、日志、测试各是一整页。
+ * 修行画面留着不销毁，回来时还站在原来那个境界标签上——试炼也不例外：
+ * 它已经从顶栏的独立页归位到元婴标签下（0.21），不再有自己的一页。
+ */
 const page = ref<'game' | 'settings' | 'automation' | 'achievements' | 'changelog' | 'dev'>('game')
 
 /**

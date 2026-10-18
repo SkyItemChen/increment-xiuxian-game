@@ -2,7 +2,8 @@
  * 元婴境界的纯数学层：元神三模式、大突破阈值/结算、metaMult、神念与斗法。
  *
  * 这个模块**不碰 state**，sim 直接 import；词条量全部摆在这一张表里。
- * 元婴还没接进运行时，所以这里同时是设计稿的可执行版本。
+ * 0.22 起运行时已经接上（`state.ts` 的 `yuanState()` / `yuanBreak()` / 神悟台 / 斗法），
+ * 但读写的入口仍然只有 `state.ts` 一处——这里只负责算式，界面与存档都不许另算一份。
  *
  * 两个必须先说清的口径：
  * 1. `pillAnchor` 在 state 里存的是 **log10(灵气/秒)**，不是灵气/秒本身。
@@ -18,8 +19,34 @@
 
 /* ------------------------------------------------------------ 门槛与标定 */
 
-/** 元婴解锁：累计灵气到过 1e100（`realms.ts` 的占位阈值，运行时接 gate 时读 totalEarned） */
-export const YUAN_UNLOCK_LOG10 = 100
+/**
+ * 元婴的门槛：累计灵气到过 **1e80**（对数口径）。
+ *
+ * **这是唯一一处写这个数的地方，也是一个可以随时调的数**：
+ * 改它，`realms.ts` 的境界阈值（元婴那一行的 `breakThrough`）、结婴的判定、
+ * 页面上那条进度条会一起跟着动。运行时别处一律读这个常量，不许再写一遍 1e80。
+ *
+ * 为什么按累计灵气（`totalEarned`）而不是手上存量：
+ * 破境、结丹、探索都会把手上的灵气散干净，用余量当门槛等于"每一世都得重新攒一次才准看元婴"。
+ * 累计那一笔只涨不跌，语义上正好是"修到这个份上，元婴自然该成了"。
+ *
+ * 取 80 而不是设计稿原先排的 100：1e100 是结丹整条链跑完才摸得到的数，
+ * 而元婴要在结丹还在推的时候就先开张；80 是用户拍板的过渡值，等实测觉得早/晚，
+ * 只改这一个常量，再跑 `sim/yuan-runtime-check.mjs` 看门槛与结丹节奏对不对得上。
+ */
+export const YUAN_UNLOCK_LOG10 = 80
+
+/**
+ * 元婴**页**的准入门槛：结丹至少一层。
+ *
+ * 这张标签下不止试炼，还有炼神/神悟/斗法；但那三区的门是**结婴**（`YUAN_UNLOCK_LOG10`），
+ * 不是这张标签的门。标签本身只按结丹层数开，理由是试炼要在结婴之前就能打——
+ * 它是道基之外的另一条增量来源，把它锁到 1e80 之后等于让玩家少一种玩法。
+ *
+ * 元婴本体已经接上运行时（0.22），`realmIndex` 能到 3 了；这条门槛仍不动，
+ * 因为它管的是"页面什么时候出现"，不是"元婴什么时候成"。
+ */
+export const YUAN_GATE_JINDAN_LAYER = 1
 
 /** 定标锚：设计稿写的 pillAnchor = 1e30（金丹线那一点），不是元婴门槛处的实际锚 */
 export const YUAN_CAL_ANCHOR_LOG10 = 30
@@ -129,7 +156,8 @@ export function yuanDaoGain(overYuan: number, dongMingLevel = 0): number {
 /** 同上，输入用 log10，避免大数在 double 里溢出 */
 export function yuanDaoGainLog10(totalLog10: number, thresholdLog10: number, dongMingLevel = 0): number {
   const diff = totalLog10 - thresholdLog10
-  if (diff <= 0) return 1
+  // 没到线也把洞明算上：`yuanDaoGain(0, 洞明)` 本来就乘，两处口径必须一致
+  if (!(diff > 0)) return yuanDaoGain(0, dongMingLevel)
   if (diff > 15) return Number.MAX_SAFE_INTEGER
   return yuanDaoGain(10 ** diff - 1, dongMingLevel)
 }
@@ -299,6 +327,18 @@ export function autoBreakUnlocked(totalBreaks: number): boolean {
 /** 倍率触发：等到阈值的几倍再破，换更多道基 */
 export type AutoBreakTrigger = 1 | 2 | 5 | 10
 
+/**
+ * 自动器能选的那几档。**0 表示关**，所以保存的是"倍率"本身而不是下标：
+ * 老档读到 0/undefined 就是关，读到别的数由 `normalizeYuanAuto()` 兜回最近的一档。
+ */
+export const YUAN_AUTO_TRIGGERS: readonly AutoBreakTrigger[] = [1, 2, 5, 10]
+
+/** 存档/界面上那个数收成合法档位；0 与其他越界值一律当"关" */
+export function normalizeYuanAuto(raw: unknown): number {
+  const n = Math.floor(Number(raw))
+  return YUAN_AUTO_TRIGGERS.includes(n as AutoBreakTrigger) ? n : 0
+}
+
 export function shouldAutoBreak(
   totalBreaks: number,
   enabled: boolean,
@@ -308,6 +348,40 @@ export function shouldAutoBreak(
 ): boolean {
   if (!enabled || !autoBreakUnlocked(totalBreaks)) return false
   return yuanLog10 >= thresholdLog10 + Math.log10(trigger)
+}
+
+/* ------------------------------------------------------------ 运行时用的小换算 */
+
+/** 模式在表里的下标，存档只存这个数；越界退回守神 */
+export function yuanModeIndex(id: YuanModeId): number {
+  const i = YUAN_MODES.findIndex((m) => m.id === id)
+  return i < 0 ? 0 : i
+}
+
+/** 下标收回模式定义；越界一律守神 */
+export function yuanModeAt(index: unknown): YuanModeDef {
+  const i = Math.floor(Number(index))
+  return i >= 0 && i < YUAN_MODES.length ? YUAN_MODES[i] : YUAN_MODES[0]
+}
+
+/** 斗法档位的下标与反查，规矩同上 */
+export function fightModeIndex(id: FightModeId): number {
+  const i = FIGHT_MODES.findIndex((m) => m.id === id)
+  return i < 0 ? 0 : i
+}
+
+export function fightModeAt(index: unknown): FightModeDef {
+  const i = Math.floor(Number(index))
+  return i >= 0 && i < FIGHT_MODES.length ? FIGHT_MODES[i] : FIGHT_MODES[0]
+}
+
+/**
+ * 元神实际到账的倍率：斗法分走的那一份不算进大突破。
+ * 分流是**乘法**而不是减法——`yuanDrain = 0.3` 就是"只剩七成进元神"，
+ * 所以死战的首破时长正好按 1/0.7 ≈ 1.43 倍拉长（§11.10 那张表）。
+ */
+export function yuanDrainKeep(mode: FightModeDef): number {
+  return Math.max(0, Math.min(1, 1 - mode.yuanDrain))
 }
 
 /* ------------------------------------------------------------ 旧锚保护 */

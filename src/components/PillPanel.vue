@@ -7,6 +7,7 @@ import {
   fmtNum,
   jindanBreak,
   jindanState,
+  jindanTreePoints,
   needJindanConfirm,
   pillBatch,
   pillBuyIds,
@@ -69,21 +70,60 @@ const fasterText = computed(() => {
   return n <= 1 ? '快一倍' : `快 ${fmtNum(n)} 倍`
 })
 
-/** 差几级炉子就说炉子，炉子够了才说灵气——两个门槛别混成一句"还没到" */
+/** 秒数写法：仪式动辄两三分钟，别把 147 直接甩出来 */
+function secText(s: number): string {
+  if (!Number.isFinite(s)) return '—'
+  if (s < 90) return `${Math.round(s)} 秒`
+  return `${(s / 60).toFixed(1)} 分`
+}
+
+/** 差几级炉子就说炉子，炉子够了才轮到灵气与丹——三道闸别混成一句"还没到" */
 const gateSubText = computed(() => {
   const g = gate.value
   if (g.ready) return `结为第 ${state.jindan + 1} 层金丹 · 往后修行${fasterText.value}`
   if (lacking.value > 0) return `丹炉要炼到第 ${g.need} 级，还差 ${lacking.value} 级`
-  return `手上要有 ${fmt(g.floor)} 灵气`
+  if (!g.danFloor.isZero && !state.dan.gte(g.danFloor)) {
+    return `还要焚 ${fmt(g.danFloor)} 丹（约 ${secText(g.danRitualSeconds)} 丹产）`
+  }
+  return `手上要有 ${fmt(g.floor)} 灵气（约 ${secText(g.ritualSeconds)} 产量）`
 })
 
-/** 炉子还差几级是整数刻度，够了之后改看灵气那条 log 进度 */
+/** 炉子还差几级是整数刻度，够了之后改看灵气 / 丹那条 log 进度 */
 const gateProgress = computed(() => {
   const g = gate.value
   if (g.ready) return 100
   if (lacking.value > 0) return Math.round((g.furnace / g.need) * 100)
+  if (!g.danFloor.isZero && !state.dan.gte(g.danFloor)) {
+    const ratio = state.dan.log10() / g.danFloor.log10()
+    return Math.round(Math.min(Math.max(ratio, 0), 1) * 100)
+  }
   const ratio = shown.spirit.log10() / g.floor.log10()
   return Math.round(Math.min(Math.max(ratio, 0), 1) * 100)
+})
+
+/**
+ * 老档提醒：0.17 的丹纹对结丹没有收益，很多玩家的 97 点一分没点。
+ * 0.18 之后这 97 点直接压着门槛，所以"一层都没点"必须显式喊一声，
+ * 否则他们读档只会觉得"怎么突然变慢了"。
+ */
+const unspentText = computed(() => {
+  const g = gate.value
+  if (g.depth > 0 || state.jindan < 2) return ''
+  const points = jindanTreePoints()
+  if (points < 1) return ''
+  return `手上 ${points} 点丹纹一分没点：结丹仪式要 ${secText(g.ritualSeconds)}，去丹纹页点掉能立刻缩短`
+})
+
+/**
+ * 结丹成本那行：门槛 = max(老阶梯, 历史最高产量 × 仪式秒数)，再单列一道丹闸。
+ * 这里必须把"约几分钟产量"念出来——绝对数字（1e65 还是 1e35）对玩家没有意义，
+ * 有意义的是"按下去之前要攒多久"，以及"丹纹能把这几分钟压到多少"。
+ */
+const costText = computed(() => {
+  const g = gate.value
+  const qi = `门槛 ${fmt(g.floor)} 灵气（约 ${secText(g.ritualSeconds)} 产量）`
+  const dan = g.danFloor.isZero ? '丹闸未开' : `焚 ${fmt(g.danFloor)} 丹（约 ${secText(g.danRitualSeconds)} 丹产）`
+  return `第 ${g.layer} 层 · ${qi} · ${dan}`
 })
 
 /** 下一级还要等多久。这一段是丹炉页唯一真正要念的数，别写成"买不起" */
@@ -218,8 +258,10 @@ function onConfirmJindan(): void {
           </button>
           <span class="gate-bar"><i :style="{ width: `${gateProgress}%` }"></i></span>
           <p class="gate-note">
-            散掉的是这一世的灵气与法门修为，丹、炉子、根骨、法宝、废渣一分不动。
+            散掉的是这一世的灵气、丹与法门修为；炉子、丹房、根骨、法宝、废渣一分不动。
           </p>
+          <p class="gate-note cost">{{ costText }}</p>
+          <p v-if="unspentText" class="gate-note warn">{{ unspentText }}</p>
         </div>
       </section>
 
@@ -590,6 +632,20 @@ function onConfirmJindan(): void {
   letter-spacing: 1px;
   text-align: center;
   color: var(--ink-faint);
+}
+
+/* 成本那行是数字，别跟着上面那句"散掉什么"一起淡下去 */
+.gate-note.cost {
+  margin-top: 4px;
+  color: var(--ink-dim);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 攒着丹纹不点的提醒：它是这一栏唯一"该做没做"的事，用告警色而不是淡灰 */
+.gate-note.warn {
+  margin-top: 6px;
+  color: var(--lose);
+  line-height: 1.6;
 }
 
 .head {

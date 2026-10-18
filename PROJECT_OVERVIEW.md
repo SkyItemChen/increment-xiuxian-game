@@ -288,6 +288,11 @@ node --import ./sim/ts-hook.mjs sim/ninglian-check.mjs    # 火候三档凹性�
 | **吐纳速度溢出成 Infinity 后灵气归零** | 速度乘到 1e308 以上 → `gatherSpeed = Infinity` → `gatherSeconds = 0`、`cycles = Infinity`，而 `BigNumber.mulNumber(Infinity)` 的尾数会被抹成 0，吐纳、丹、每秒产出一起变 0：**页面不卡，但一格灵气都不进**。改过等级的存档尤其容易撞上 | 速度在 `GATHER_SPEED_CAP = 5e5` 处截断，溢出那一截按等比例折成 `spiritPerGather`（`gatherOverflowLog10`），`rate × speed` 保持不变。**速度一律在 log10 里累加**（`p.speedMult.log10()`），不要先 `toNumber()` 再乘——那样溢出前后就分不出来了。等级写成 `Infinity`/`NaN` 的坏档按 1 倍兜底 |
 | **涨价削减把"越买越贵"翻成"越买越赚"** | 悟性/玄铜镜砍 growth 砍过头，乘法法门的 `E = log(power)/log(growth)` 会被抬上去；三条 ΣE ≥ 1 之后等级与流量互抬，金丹期一小时就能从 1e87 冲到 F500（指数上亿）。**表面完全正常**：没有报错、没有卡顿，只是数字疯了 | `rebirth.ts` 的 `growthCutOf` 给 log 涨幅留了 `MAX_LOG_CUT = 1/3` 的地板（`growth^(2/3)`），ΣE 封在 0.648。改任何"削减/涨价/每级收益"的数字后跑 `sim/rebirth-cut-check.mjs`；`MIN_GROWTH = 1.25` 只防"越买越便宜"，**挡不住越买越赚** |
 | **想给"超出上限的削减"发补偿** | 例如把溢出折成首级价折扣：只改截距不改斜率，ΣE 不变、本身安全；但**一旦顺手撤掉 `MAX_LOG_CUT`**、让 growth 一路砍到 `MIN_GROWTH`，ΣE 立刻回到 1.33~5.5，F500 原样复发（触发档位还是 31 级）。折价那条旁路也会让"价格是否还自限"多一个要同时维护的变量 | 定案：悟性到顶即饱和，不给溢出发补偿。要修"点数白花"只能动别的轴，别碰 `MAX_LOG_CUT`、别给首级价打折。校验脚本里有一条断言：地板咬合后再加大削减，ΣE 不再变化 |
+| **结丹门槛写成绝对数 → 层数白送** | 门槛只要是"层数的纯函数"，就会被复利淹没。0.18 把涨幅挂到丹纹上仍然不够：104 层门槛 2.56e35，玩家手上 1e65，门槛只占持有量的 1e-29.6；405 层时产出比门槛高 **1e32**（回溯每层 ×1.25，门槛每层 ×1.08~×1.00）。数学上任何 `C·g^n`（g ≤ 1.25）都追不上 `P·1.25^n`，**调参救不了**。**没有任何报错**，只是内容被跳过 | 0.19 起门槛 = `max(老阶梯, 10^pillAnchor × T灵(n))`：产量过 1e28/s 后由"你自己的产量 × 仪式秒数"接管，绝对数字不再有意义。`pillAnchor` 只涨不跌（防自废流量套利）。改完跑 `sim/jindan-balance-audit.mjs` |
+| **丹纹"补差"把收益整份抵掉 → 丹纹形同虚设** | 0.17 用 `C(n) = 参考点法收益(n)/收益(1)` 乘进门槛，σ=1 时"收益 ×C ÷ 门槛 ×C"净提速恒为 0.92，与点得多厚无关；更糟的是 C 只读层数，不点的人也在替丹纹付涨价。实测 80 层点与不点只差 1.08 倍，四枝满级总共只值 5.1 层 | 现在丹纹**不参与门槛的绝对值**，只缩仪式秒数（每级 −1%，封底一半），收益与成本不再互相抵消。教训：任何"让 A 的收益同时抬 A 的成本"的对称设计，先算净效应是不是恒等 |
+| **用存量当门槛却不消耗它** | 丹原来是永不清零的存量，三个出口（炉 ×30、火候 ×10、丹房 ×3）全是几何涨价，唯一的乘数出口丹炉买到头也就几十级。1e75 的丹堆着既不进门槛也不被结丹扣，等于一串没有下场的好看数字 | 结丹同时清空丹（`JIEDAN_DAN_BURN_ALL`），丹门槛按 `丹/秒 × T丹` 定价。想让存量有意义，**必须给它一个会跟着结丹走的汇**；百分比抽成治不了"存量比产量高十个数量级"（会直接卡死） |
+| **重置类玩法照抄破境的结算** | 破境在清账的同时会**发一笔筑基点**。试炼要"重置"时若直接复用 `breakThrough()`，玩家点一下入试炼反而白赚一次破境收益，赌注当场变成免费收益 | 试炼走自己的 `enterTrial()`：清同样的范围，但**不发点、`loops` 也不加一**（试炼不算一次破境）。教训：「照抄另一条重置路径」时必须连"它顺手给了什么"一起核对 |
+| **一次性挑战的目标写成绝对数** | 试炼若要求"攒到 1e30"，树厚之后几分钟就完成、奖励一文不值；写死到后期量级又会变成几小时。同 §5.1 那条复利淹没是老病 | 目标取"**进入时的本世累计**"（下限 1e10），对第一世和第一百世都是"爬回原处"；debuff 的倍数于是直接等于"这一世要多花几倍时间" |
 | **AI 自行开浏览器验证** | 截图、快照、DOM 检查慢且耗 token，还容易被离线条目带偏 | 默认不做；只跑 `npm run build` 与 `sim/`，界面实点交给用户 |
 | **隐藏面板阻塞 rAF** | Qoder 内置浏览器面板没打开时，`requestAnimationFrame` 停摆，Vue `<Transition>` 卡在 leave 阶段，主循环不结算 | 验渲染前提示用户打开面板；逻辑层验证改用 node 直跑真实模块（`sim/` 脚本） |
 | **改活体 state 写花存档** | 在控制台直接改 `state.xxx` 后 reload，`beforeunload → saveGame` 会把半路改坏的状态写进 localStorage | 验完锁定态要把值改回去再 reload；或用导入存档弹窗的方式恢复，不走 `setItem` |
@@ -296,6 +301,10 @@ node --import ./sim/ts-hook.mjs sim/ninglian-check.mjs    # 火候三档凹性�
 | **vue-tsc --noEmit 空跑** | 根 tsconfig 是 solution-style 壳子，`vue-tsc --noEmit` 查零文件退 0 | 只用 `npm run build` 做类型闸 |
 | **剪贴板 API 被拒** | Qoder 内置浏览器面板里 `navigator.clipboard.readText/writeText` 抛 `NotAllowedError` | 文本框 + 文件那条路靠 `evaluate_script` 往 textarea 里 `setter.call(ta, text)` 再 `dispatchEvent(new Event('input'))` |
 | **git push 网络抖动** | `Failed to connect to github.com port 443` 间歇性出现 | 重试 2–3 次；检查是否代理配置异常；api.github.com 通但 github.com 不通时可能是 DNS/路由问题 |
+| **内容门槛写死在运行时里** | `trialGate()` 原来是 `const need = 1` 加上整页一个门槛：表里再加十道试炼也只有"同进同出"，想挂一道"元婴专属"就得改代码，而且改完没人知道有没有生效。这类常数还会**悄悄和设计稿脱钩**——文档写"元婴内容"，代码挂在筑基，两边都不报错 | 门槛必须**逐条写在数据表里**（0.21 起是 `TrialDef.minJindan`），运行时只做"账 ≥ 门槛"；整页门槛取"最浅的那一条"。`sim/trial-check.mjs` 第七组盯：门槛为正整数、不倒退、整页门槛 = 最浅一条、0 层全关、刚到手算开、老档全开 |
+| **用 `realmIndex` 当境界门槛，而这一境根本到不了** | 试炼要"元婴专属"，最自然的写法是 `minRealm = 3`。但本作的破境目标恒定是筑基（`breakRealm()` = `nextRealm(0)`），金丹是结丹时补的 2，元婴本体没接运行时——`realmIndex` **没有任何路径到 3**。写成 3 不是"锁住"，是"永久删除"；而且不报错、不崩溃，界面只是永远显示"需 至 元婴" | 门槛一律用**实际会增长的那本账**表达：元婴页与四道试炼都按 `state.jindan`（只涨不跌、跨世保留）。`元婴.ts` 的 `YUAN_GATE_JINDAN_LAYER` 与 `TRIALS[0].minJindan` 必须相等，断言拿这条等式当闸——不等就是"页面开了点不动"或"内容永远在页外" |
+| **页面门槛与内容门槛各写一个数** | 标签按 A 开、第一张牌按 B 开，A>B 会打开一页点不动的牌，A<B 则内容永远在页外。两个数分别看都"合理"，合起来就是空页或空谈 | 页面门槛 **等于**最浅那条内容门槛（`trialGateJindan(TRIALS) === YUAN_GATE_JINDAN_LAYER`），并由 sim 断言钉死；抬门槛时两个一起抬 |
+| **公告里的"未开放"没人记** | `更新日志.ts` 只写已上线内容（正确），但没有任何地方声明"哪些境界还没做"。玩家看到境界表排到元婴、公告里一个字不提，只能猜；开发侧也只能靠 `realms.ts` 那行 `page: 'todo'` 自己记着 | 判据放在代码里而不是文档里：`realms.ts` 的 `page` 是唯一真相，`sim` 断言拿它当闸；接线时把 `'todo'` 换掉，断言与公告一起动 |
 
 ---
 
@@ -304,6 +313,8 @@ node --import ./sim/ts-hook.mjs sim/ninglian-check.mjs    # 火候三档凹性�
 | 文件 | 行号参考 | 用途 |
 |------|---------|------|
 | [`GAME_NUMBERS.md`](GAME_NUMBERS.md) | — | 玩法与数值模型（供推演下一轮内容，含公式、锚点、墙与约束清单） |
+| [`元婴阶段内容梳理与开放评估.md`](%E5%85%83%E5%A9%B4%E9%98%B6%E6%AE%B5%E5%86%85%E5%AE%B9%E6%A2%B3%E7%90%86%E4%B8%8E%E5%BC%80%E6%94%BE%E8%AF%84%E4%BC%B0.md) | — | 元婴六块内容的完成度、分层开放范围与限制、两门槛的推导 |
+| [`src/game/元婴.ts`](src/game/%E5%85%83%E5%A9%B4.ts) | `YUAN_UNLOCK_LOG10`, `YUAN_GATE_JINDAN_LAYER`, `YuanModeDef`, `yuanRateLog10()` | 元婴纯数学层（0.22 已接线）+ 两道门槛常量 |
 | [`src/game/state.ts`](src/game/state.ts) | `counters()` ~577, `activeBonus()` ~591, `achievementRows()` ~763, `refreshDisplay()` ~555 | 全局状态、主循环、成就行生成 |
 | [`src/game/挑战.ts`](src/game/%E6%8C%91%E6%88%98.ts) | `totalBonus()` ~83, `achievementUnlocked()` ~54 | 成就/挑战/里程碑判定与 bonus 聚合 |
 | [`src/game/词条与属性.ts`](src/game/%E8%AF%8D%E6%9D%A1%E4%B8%8E%E5%B1%9E%E6%80%A7.ts) | `ACHIEVEMENTS` ~560, `CHALLENGES` ~903, `JINDAN_MILESTONES` ~960, `Bonus` ~414 | 所有词条表、常量、阈值 |
@@ -313,8 +324,14 @@ node --import ./sim/ts-hook.mjs sim/ninglian-check.mjs    # 火候三档凹性�
 | [`sim/jindan-anchor.mjs`](sim/jindan-anchor.mjs) | — | 结丹线锚点验证（必跑） |
 | [`sim/jindan-tree.mjs`](sim/jindan-tree.mjs) | — | 丹纹四枝点数投放与轴刻度 |
 | [`src/components/JindanTreePanel.vue`](src/components/JindanTreePanel.vue) | — | 金丹页丹纹子标签 |
+| [`src/components/YuanPanel.vue`](src/components/YuanPanel.vue) | — | 元婴页外壳：试炼 / 元神 / 道基 / 斗法 四个子页 |
+| [`src/components/YuanShenPanel.vue`](src/components/YuanShenPanel.vue) | — | 结婴门、元神与道基钱包、三档心法、大突破与自动器、元神宫 |
+| [`src/components/YuanDaoPanel.vue`](src/components/YuanDaoPanel.vue) | — | 神悟台八条（道基买，喂回练气/金丹五轴） |
+| [`src/components/YuanFightPanel.vue`](src/components/YuanFightPanel.vue) | — | 斗法：分流换战魂、战将、战悟五条（神念买） |
+| [`src/components/TrialPanel.vue`](src/components/TrialPanel.vue) | — | 试炼四道卡片、局中进度、退出与结算 |
+| [`sim/yuan-runtime-check.mjs`](sim/yuan-runtime-check.mjs) | — | 元婴运行时回归：门槛、结婴、大突破、神悟台、斗法、存档 v18（必跑） |
 | [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) | — | CI/CD 流水线 |
 
 ---
 
-*最后更新：2026-10-17*
+*最后更新：2026-10-18*

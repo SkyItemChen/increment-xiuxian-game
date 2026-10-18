@@ -3,15 +3,23 @@ import { computed, reactive, ref } from 'vue'
 import {
   GLOBAL_SPEEDS,
   devAddDan,
+  devAddDaoJi,
   devAddDreg,
   devAddInsight,
   devAddPoints,
+  devAddShenNian,
   devAddSpirit,
+  devAddWarSoul,
   devFillSpirit,
+  devFillYuan,
+  devUnlockYuan,
   fmt,
+  fmtNum,
   pointPassActive,
   pointPassPerSecond,
   state,
+  yuanRealmOpen,
+  yuanState,
 } from '../game/state'
 import { FURNACE_ID } from '../game/金丹丹炉'
 
@@ -30,6 +38,10 @@ const furnaceText = computed(() => state.pillLevels[FURNACE_ID] ?? 0)
 const passText = computed(() => pointPassPerSecond().toFixed(3))
 /** 破境线撤了之后，"灌到破境线"那颗只能翻倍数 */
 const noBreak = computed(() => pointPassActive())
+
+/** 元婴那一层：测试页只摆"推门槛"这几颗，数值细节回元婴页看 */
+const yuan = computed(() => yuanState())
+const yuanOpen = computed(() => yuanRealmOpen())
 
 const UNITS = [
   { label: '×1', mult: 1 },
@@ -159,6 +171,51 @@ const marks = [10, 100, 1000, 10000, 100000, 1000000]
                 :class="{ on: state.settings.globalSpeed === s }"
                 @click="state.settings.globalSpeed = s"
               >×{{ s }}</button>
+            </div>
+          </div>
+        </section>
+
+        <section class="column">
+          <h2 class="heading">元婴</h2>
+          <p class="gloss">结婴要累计灵气 1e80 加结丹一层。这几颗把"该挂的时长"直接跳过，验完别存。</p>
+
+          <div class="row">
+            <div class="row-text">
+              <p class="name">结婴</p>
+              <p class="desc">
+                当前 {{ yuanOpen ? '已结婴' : '未结婴' }} ·
+                累计灵气 log10 {{ state.totalEarned.log10().toFixed(1) }}
+              </p>
+            </div>
+            <button class="action" type="button" :disabled="yuanOpen" @click="devUnlockYuan()">
+              推 到 1e80 并 结 婴
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="row-text">
+              <p class="name">元神</p>
+              <p class="desc">
+                {{ yuanOpen ? `每秒 ${fmt(yuan.rate)} · 阈值 ${fmt(yuan.threshold)}` : '结婴之后才有' }}
+              </p>
+            </div>
+            <button class="action" type="button" :disabled="!yuanOpen" @click="devFillYuan()">
+              灌 到 阈 值
+            </button>
+          </div>
+
+          <div class="row">
+            <div class="row-text">
+              <p class="name">道基 / 神念 / 战魂</p>
+              <p class="desc">
+                道基 {{ fmtNum(state.daoJi) }} · 神念 {{ fmtNum(state.shenNian) }} ·
+                战魂 {{ fmtNum(state.warSoul) }}
+              </p>
+            </div>
+            <div class="quick">
+              <button class="chip" type="button" @click="devAddDaoJi(100)">+100 道基</button>
+              <button class="chip" type="button" @click="devAddShenNian(1000)">+1千 神念</button>
+              <button class="chip" type="button" @click="devAddWarSoul(1000)">+1千 战魂</button>
             </div>
           </div>
         </section>

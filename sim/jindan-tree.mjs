@@ -16,15 +16,14 @@ import {
   jindanInsightPerLayer,
   jindanTreeCost,
   LIANQI_UPGRADES,
+  PILL_ANCHOR_SECONDS,
   REBIRTH_TREE,
   TREASURES,
 } from '../src/game/词条与属性.ts'
-import { jindanReturnMult } from '../src/game/金丹丹炉.ts'
+import { jindanReturnMult, jindanRitualSeconds } from '../src/game/金丹丹炉.ts'
 import { totalBonus } from '../src/game/挑战.ts'
 import { exploreCost } from '../src/game/explore.ts'
 import { mergeMods, runLife, treeMods, treasureMods, dur } from './life-engine.mjs'
-
-const PILL_ANCHOR_SECONDS = 4.32e16
 
 const powerOf = (id) => JINDAN_TREE.find((b) => b.id === id).power
 
@@ -123,8 +122,11 @@ function lifeSeconds(k, st) {
   const m = jindanReturnMult(k)
   const qi = qiBonus(st)
   const furnace = FURNACE_PHASE / Math.sqrt(m * qi) / danBonus(st)
-  const rest = (T0 - FURNACE_PHASE) / (m * qi)
-  return furnace + rest
+  // 0.19：攒灵气那一段就是"仪式秒数"——门槛 = 本世产量 × T，所以等多久由 T 说了算，
+  // T 又只由层数与丹纹总等级定（每级 −1%，封底一半）。
+  // 注意：门槛与产量同比例涨，所以返元/丹道那点产出加成**不会**缩短等待——能缩短的只有总等级。
+  const total = JINDAN_TREE.reduce((a, b) => a + (st.levels[b.id] ?? 0), 0)
+  return furnace + jindanRitualSeconds(k + 1, total)
 }
 
 /** 结算这一层到手的丹纹点：每层底数 + 这一层里程碑那几笔 */
@@ -257,8 +259,9 @@ console.log(
 )
 
 console.log('\n【结论】')
-console.log('  1. 点数几乎全在后段才到：第 20 层已经是 4.5 小时上下，422 点里约 385 点落在最后一刻钟。')
-console.log('  2. 里程碑前段那 17 点让第 8 层就能把一枝点到 6 级，前期不至于“有系统没点可点”；')
-console.log('     但生产枝（丹道/返元）对 405 层总时长的影响仍很小，4.8 小时这条锚基本不动。')
+console.log('  1. 前段很轻：第 20 层累计约 0.68 小时、第 100 层约 3.7 小时；422 点里约 385 点落在最后四分之一。')
+console.log('  2. 0.19 起丹纹缩的是"仪式秒数"（每级 −1%，封底一半），而总等级只认级数、不认喂在哪枝，')
+console.log('     所以四枝轮点（总级最多）最快：12.56h vs 一主一副 15.62h vs 不点 20.77h。')
 console.log('  3. 识海优先把 405 层的结丹见识抬到一千六百多，仍只是鉴宝台满额的千分之几，不会一次买穿。')
-console.log('  4. 四枝全满要 1012 点，正好落在 1000 层附近：405 层是“一主一副”，1000 层才谈“全满”。')
+console.log('  4. 四枝全满要 1012 点，正好落在 1000 层附近：405 层是"一主一副"，1000 层才谈"全满"。')
+console.log('  5. 完全不点也不是走不动：每层 2～4.5 分钟、405 层 20.8 小时（`sim/jindan-balance-audit.mjs` 盯着这条）。')

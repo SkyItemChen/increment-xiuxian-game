@@ -2,8 +2,8 @@
 // 用法：node --import ./sim/ts-hook.mjs sim/realm-timeline.mjs
 //
 // 这里只回答一件事：按现在的数值，玩家每一步要花多久；以及 1e100 那道门槛到底差多远。
-import { TREASURES, REBIRTH_TREE, LIANQI_UPGRADES, JIEDAN_FURNACE_LEVEL } from '../src/game/词条与属性.ts'
-import { jindanReturnMult } from '../src/game/金丹丹炉.ts'
+import { TREASURES, REBIRTH_TREE, LIANQI_UPGRADES, JIEDAN_FURNACE_LEVEL, PILL_ANCHOR_SECONDS } from '../src/game/词条与属性.ts'
+import { jindanReturnMult, jindanRitualSeconds } from '../src/game/金丹丹炉.ts'
 import {
   GATE, bareMods, mergeMods, treeMods, treasureMods, runLife, dur, pointsOf, greedyTree,
 } from './life-engine.mjs'
@@ -36,13 +36,15 @@ function toPoints(target) {
 }
 
 /**
- * 一世的丹炉段与攒灵气段分开缩：丹炉价按 √流量 涨，所以按 1/√M；
- * 剩下的攒灵气按 1/M。丹炉段直接由本档收尾流量算：t·√流量 = 4.32e16 秒。
+ * 0.19 起结丹门槛按"本世产量 × 仪式秒数"定价，所以一世的"等"就是仪式秒数本身，
+ * 前面再加上把法门重新买回来的爬坡段（按丹炉段同一条 1/√M 缩）。
+ * 这里按"完全不点丹纹"算（0 级），量出来的是结丹链的**上界**；
+ * 丹纹点满能把这串秒数砍掉一半，见 `sim/jindan-balance-audit.mjs`。
+ * `PILL_ANCHOR_SECONDS` 从词条里读，别在这里硬编码——0.17 改过这个锚，留第二份就会差出四分之一。
  */
-const PILL_ANCHOR_SECONDS = 4.32e16
 function lifeAt(T0param, n) {
   const m = jindanReturnMult(n)
-  return FURNACE_PHASE / Math.sqrt(m) + (T0param - FURNACE_PHASE) / m
+  return jindanRitualSeconds(n + 1, 0) + FURNACE_PHASE / Math.sqrt(m)
 }
 
 /** 结丹第 n 层的累计时长：第 k 世（已结 k 层）的时长按 lifeAt 缩 */
@@ -97,9 +99,9 @@ console.log(`  根骨各 Lv.15 的同一世：${dur(life30b.t)} · 收尾流量 
 console.log('\n【阶段三 · 丹炉结丹线】')
 console.log(`  丹炉 Lv.${JIEDAN_FURNACE_LEVEL}：12.00 小时 @ 灵气/秒 1e24 · t×√流量 = 4.32e16 秒（锚点）`)
 console.log(`  本档收尾流量 1e${flowLog8.toFixed(2)}/秒 → 炉子那段约 ${dur(FURNACE_PHASE)}，剩余 ${dur(T0 - FURNACE_PHASE)} 攒灵气`)
-console.log('  首丹之后每一世的门槛仍是“炉 ≥12 + 手上 1e30”，炉子等级不散')
+console.log('  首丹之后每一层的门槛改成“炉 ≥12 + 手上 max(老阶梯, 本世产量 × 仪式秒数)”，炉子等级不散，涨的只有仪式秒数')
 
-console.log('\n【阶段四 · 结丹回溯】首层 ×2、之后每层 ×1.25（丹炉段按 1/√M，攒灵气段按 1/M）')
+console.log('\n【阶段四 · 结丹回溯】首层 ×2、之后每层 ×1.25（每层耗时 = 仪式秒数 + 重建法门的爬坡）')
 for (const n of [1, 2, 3, 5, 8, 12, 20, 50, 100, 200, 405]) {
   const m = jindanReturnMult(n)
   console.log(

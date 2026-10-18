@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { REALMS, visibleRealms } from '../game/realms'
+import { CULTIVATE_INDEX, REALMS, visibleRealms } from '../game/realms'
 import {
   autoBuyActive,
   breakBonus,
@@ -26,6 +26,7 @@ import OfflineDialog from './OfflineDialog.vue'
 import PillPanel from './PillPanel.vue'
 import RebirthPanel from './RebirthPanel.vue'
 import UpgradeList from './UpgradeList.vue'
+import YuanPanel from './YuanPanel.vue'
 
 const emit = defineEmits<{ openSettings: [], openAutomation: [], openAchievements: [], openChangelog: [], openDev: [] }>()
 
@@ -44,7 +45,7 @@ const paceText = computed(() => {
     ? `每秒 ${fmtNum(perSecond, 0)} 次`
     : `每秒 ${perSecond.toFixed(1).replace(/\.0$/, '')} 次`
 })
-/** 吐纳速度词条生效时才占位，起手期那行还是干净的"每 5 秒一次" */
+/** 吐纳速度词条生效时才占位，起手期那行还是干净的"每 3 秒一次" */
 const speedText = computed(() => {
   if (!(state.gatherSpeed > 1.005)) return ''
   const text = ` · 吐纳速度 ×${fmtNum(state.gatherSpeed)}`
@@ -88,6 +89,17 @@ const gateProgress = computed(() => {
 
 /** 金丹一开张，破境那颗按钮就撤了：这一栏改成念每秒折给多少筑基点 */
 const passive = computed(() => viewed.value.page === 'cultivate' && pointPassActive())
+/** 试炼里破境是封着的，那一格要换成一句说明，否则玩家会以为按钮丢了 */
+const trialOn = computed(() => state.trialId >= 0)
+
+/**
+ * 去看试炼：切到元婴那一栏。试炼不再是顶栏的独立页（0.21 归位到元婴标签下），
+ * 所以这里只换标签，不换整页。标签在局中一定看得见——元婴页的门票是结丹层数，只涨不跌。
+ */
+function goTrial(): void {
+  const yuan = realms.value.find((r) => r.page === 'yuan')
+  if (yuan) active.value = yuan.id
+}
 const passText = computed(() => pointPassPerSecond().toFixed(2))
 /** 多攒一个数量级能多换几点，摆在字据里当"挂久一点还有好处"的凭据 */
 const passStepText = computed(() => (POINTS_PER_DECADE * POINT_PASS_RATE).toFixed(2))
@@ -209,7 +221,15 @@ const playTime = computed(() => {
             </div>
           </div>
 
-          <div v-if="gate" class="gate">
+          <div v-if="trialOn" class="gate trial-gate">
+            <div class="pass">
+              <span class="pass-label">试 炼 中 · 破 境 封 着</span>
+              <span class="pass-sub">这一世要自己走回去，不能换世重来</span>
+            </div>
+            <button class="trial-link" type="button" @click="goTrial">查 看 试 炼</button>
+          </div>
+
+          <div v-else-if="gate" class="gate">
             <button
               class="breakthrough"
               type="button"
@@ -250,6 +270,10 @@ const playTime = computed(() => {
 
       <section v-else-if="viewed.page === 'pill'" class="pill-page">
         <PillPanel />
+      </section>
+
+      <section v-else-if="viewed.page === 'yuan'" class="yuan-page">
+        <YuanPanel @entered="active = REALMS[CULTIVATE_INDEX].id" />
       </section>
 
       <section v-else class="locked-realm">
@@ -823,6 +847,10 @@ const playTime = computed(() => {
 
 /* 金丹页同理：整页交给丹炉面板 */
 .pill-page {
+  min-height: 100%;
+}
+
+.yuan-page {
   min-height: 100%;
 }
 

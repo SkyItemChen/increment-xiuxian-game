@@ -18,6 +18,12 @@ const fasterText = computed(() => {
   const n = props.preview.mult - 1
   return n <= 1 ? '快一倍' : `快 ${fmtNum(n)} 倍`
 })
+
+/** 仪式长度：门槛 ÷ 当前产量，念秒数比念 1e65 好懂 */
+const secText = (s: number): string => (s < 90 ? `${Math.round(s)} 秒` : `${(s / 60).toFixed(1)} 分`)
+const ritualText = computed(
+  () => `攒 ${secText(props.preview.ritualSeconds)} 灵气产 · 焚 ${secText(props.preview.danRitualSeconds)} 丹产`,
+)
 </script>
 
 <template>
@@ -31,6 +37,10 @@ const fasterText = computed(() => {
           <li>
             <span class="key">手上灵气</span>
             <span class="val">{{ fmt(preview.spirit) }}</span>
+          </li>
+          <li>
+            <span class="key">这一炉丹</span>
+            <span class="val">{{ fmt(preview.dan) }}</span>
           </li>
           <li v-if="!noneText">
             <span class="key">法门修为</span>
@@ -56,15 +66,28 @@ const fasterText = computed(() => {
             <span class="val strong">{{ fasterText }}</span>
           </li>
           <li>
-            <span class="key">丹与丹炉</span>
-            <span class="val">一分不散，跟着人走</span>
+            <span class="key">丹炉与丹房</span>
+            <span class="val">等级留着，跟着人走</span>
+          </li>
+          <li>
+            <span class="key">这一层仪式</span>
+            <span class="val">{{ ritualText }}</span>
           </li>
           <li>
             <span class="key">见识与丹纹</span>
             <span class="val">见识 +{{ preview.insightGain }} 点 · 丹纹 +{{ JINDAN_TREE_PER_LAYER }} 点</span>
           </li>
+          <li>
+            <span class="key">再下一层门槛</span>
+            <span class="val">{{ fmt(preview.nextFloor) }} 灵气</span>
+          </li>
         </ul>
         <p class="note">根骨、法宝、鉴宝台、筑基点也一样留着。金丹这一层攒的只是修行快多少，一世多长。</p>
+        <p class="note cost">
+          门槛按你自己的产量算：这一层要攒约 {{ secText(preview.ritualSeconds) }} 灵气产、焚约
+          {{ secText(preview.danRitualSeconds) }} 丹产，每往后一层再长 0.2%。
+          丹纹（眼下 {{ preview.depth }} 级）每级把这段仪式缩短 1%，最多省一半。
+        </p>
       </div>
 
       <footer class="foot">
@@ -196,6 +219,14 @@ const fasterText = computed(() => {
   font-size: 12px;
   line-height: 1.6;
   color: var(--ink-faint);
+}
+
+/* 成本那句是规则说明，别和上面那句"攒的是什么"混成一段 */
+.note.cost {
+  margin-top: 6px;
+  padding-top: 8px;
+  border-top: 1px dashed var(--line-soft);
+  color: var(--ink-dim);
 }
 
 .foot {
