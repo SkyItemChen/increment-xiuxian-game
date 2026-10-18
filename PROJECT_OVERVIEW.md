@@ -284,6 +284,10 @@ node --import ./sim/ts-hook.mjs sim/ninglian-check.mjs    # 火候三档凹性�
 
 | 陷阱 | 现象 | 规避方法 |
 |------|------|----------|
+| **逐次掷的循环随速度爆炸** | 会心/炸炉按“次数”一颗一颗掷，次数 = 时长 ÷ 每跳秒数（5/吐纳速度）。速度到 1e7 量级时一帧几十万次、8 小时闭关 1e11 次，主线程直接卡死，且**存档完全正常**（不是坏档） | 统一走 `state.ts` 的 `rollCrits(cycles, chance)`：额度 20000 以内逐次掷（种子推进、可复现），超出按期望值折算。任何新写的“逐次掷”都必须走它 |
+| **吐纳速度溢出成 Infinity 后灵气归零** | 速度乘到 1e308 以上 → `gatherSpeed = Infinity` → `gatherSeconds = 0`、`cycles = Infinity`，而 `BigNumber.mulNumber(Infinity)` 的尾数会被抹成 0，吐纳、丹、每秒产出一起变 0：**页面不卡，但一格灵气都不进**。改过等级的存档尤其容易撞上 | 速度在 `GATHER_SPEED_CAP = 5e5` 处截断，溢出那一截按等比例折成 `spiritPerGather`（`gatherOverflowLog10`），`rate × speed` 保持不变。**速度一律在 log10 里累加**（`p.speedMult.log10()`），不要先 `toNumber()` 再乘——那样溢出前后就分不出来了。等级写成 `Infinity`/`NaN` 的坏档按 1 倍兜底 |
+| **涨价削减把"越买越贵"翻成"越买越赚"** | 悟性/玄铜镜砍 growth 砍过头，乘法法门的 `E = log(power)/log(growth)` 会被抬上去；三条 ΣE ≥ 1 之后等级与流量互抬，金丹期一小时就能从 1e87 冲到 F500（指数上亿）。**表面完全正常**：没有报错、没有卡顿，只是数字疯了 | `rebirth.ts` 的 `growthCutOf` 给 log 涨幅留了 `MAX_LOG_CUT = 1/3` 的地板（`growth^(2/3)`），ΣE 封在 0.648。改任何"削减/涨价/每级收益"的数字后跑 `sim/rebirth-cut-check.mjs`；`MIN_GROWTH = 1.25` 只防"越买越便宜"，**挡不住越买越赚** |
+| **想给"超出上限的削减"发补偿** | 例如把溢出折成首级价折扣：只改截距不改斜率，ΣE 不变、本身安全；但**一旦顺手撤掉 `MAX_LOG_CUT`**、让 growth 一路砍到 `MIN_GROWTH`，ΣE 立刻回到 1.33~5.5，F500 原样复发（触发档位还是 31 级）。折价那条旁路也会让"价格是否还自限"多一个要同时维护的变量 | 定案：悟性到顶即饱和，不给溢出发补偿。要修"点数白花"只能动别的轴，别碰 `MAX_LOG_CUT`、别给首级价打折。校验脚本里有一条断言：地板咬合后再加大削减，ΣE 不再变化 |
 | **AI 自行开浏览器验证** | 截图、快照、DOM 检查慢且耗 token，还容易被离线条目带偏 | 默认不做；只跑 `npm run build` 与 `sim/`，界面实点交给用户 |
 | **隐藏面板阻塞 rAF** | Qoder 内置浏览器面板没打开时，`requestAnimationFrame` 停摆，Vue `<Transition>` 卡在 leave 阶段，主循环不结算 | 验渲染前提示用户打开面板；逻辑层验证改用 node 直跑真实模块（`sim/` 脚本） |
 | **改活体 state 写花存档** | 在控制台直接改 `state.xxx` 后 reload，`beforeunload → saveGame` 会把半路改坏的状态写进 localStorage | 验完锁定态要把值改回去再 reload；或用导入存档弹窗的方式恢复，不走 `setItem` |

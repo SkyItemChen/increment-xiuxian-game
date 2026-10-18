@@ -217,7 +217,7 @@ export interface RebirthDef {
 export const REBIRTH_TREE: RebirthDef[] = [
   { id: 'daoJi', name: '道基', effect: '每级 +22% 全部灵气产出', kind: 'global-add', power: 0.22 },
   { id: 'lingGen', name: '灵根', effect: '每级 +55% 法门灵气/秒', kind: 'output-add', power: 0.55 },
-  { id: 'wuXing', name: '悟性', effect: '每级让法门涨价幅度少涨 2.2%', kind: 'cost-cut', power: 0.022 },
+  { id: 'wuXing', name: '悟性', effect: '每级让法门涨价幅度少涨 2.2%（最多砍掉三分之一的档位）', kind: 'cost-cut', power: 0.022 },
   { id: 'huiGen', name: '慧根', effect: '每级 +5.5% 机会让一次吐纳收益 ×3', kind: 'crit-add', power: 0.055 },
   { id: 'yuanFa', name: '缘法', effect: '每级让筑基点进项多 1 点', kind: 'point-add', power: 1 },
 ]
@@ -347,7 +347,7 @@ export const TREASURES: TreasureDef[] = [
   { id: 'juBaoPen', name: '聚宝盆', rarity: 'fan', kind: 'auto-base', power: 200, cap: 8,
     effect: '每层 +200 灵气/秒', lore: '盆里取之不竭，开局那几天不必再挨饿。' },
   { id: 'xuanTongJing', name: '玄铜镜', rarity: 'fan', kind: 'cost-cut', power: 0.02, cap: 6,
-    effect: '每层让法门涨价幅度少涨 2%', lore: '镜中照见关窍，参悟起来少走弯路。' },
+    effect: '每层让法门涨价幅度少涨 2%（与悟性共用同一个上限）', lore: '镜中照见关窍，参悟起来少走弯路。' },
   { id: 'qingZhuDi', name: '青竹笛', rarity: 'fan', kind: 'speed-mult', power: 1.12, cap: 8,
     effect: '每层吐纳速度 +12%', lore: '笛声一起，气息自己就跟着走了。' },
   { id: 'qianKunDing', name: '乾坤鼎', rarity: 'ling', kind: 'auto-mult', power: 2, cap: 5,

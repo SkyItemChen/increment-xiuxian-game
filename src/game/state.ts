@@ -4,7 +4,7 @@ import type { NumberStyle } from './BigNumber'
 import { breakRealm, CULTIVATE_INDEX, REALMS } from './realms'
 import type { Realm } from './realms'
 import { bulkCost, LEVEL_CEILING, maxAffordable, productionOf } from './upgrades'
-import { pointsForLoop, rebirthCost } from './rebirth'
+import { growthCutOf, pointsForLoop, rebirthCost } from './rebirth'
 import { drawCount, exploreCost, EXPLORE_UNLOCK_POINTS, freshSeed, insightOfStake, luckOf, nextRoll, openRarities, rarityOdds, rollExplore } from './explore'
 import type { ExploreMods, ExploreOutcome } from './explore'
 import {
@@ -124,6 +124,26 @@ export type GlobalSpeed = (typeof GLOBAL_SPEEDS)[number]
 export const GATHER_PERIOD = 5
 
 /**
+ * 吐纳速度上限（倍）：每 `GATHER_PERIOD` 秒最多 50 万次吐纳，折下来一跳 10 微秒。
+ *
+ * 为什么非设不可：吐纳速度是"每 5 秒几次"的倍率，`gatherSeconds = 5 / 速度`。
+ * 速度被法门堆到 1e308 以上就会溢出成 `Infinity`，于是 `gatherSeconds = 0`、
+ * `cycles = 时长 / 0 = Infinity`，而 `BigNumber.mulNumber(Infinity)` 的尾数会被抹成 0——
+ * **灵气、丹、每秒产出一起归零，一格都拿不到**（这就是"速度溢出后灵气不再增长"）。
+ *
+ * 截断掉的那一截不扔，按等比例折成灵气加成（见 `recompute()` 的 `gatherOverflowLog10`），
+ * 所以 `灵气/秒 = 每笔金额 × 吐纳速度` 与截断前完全相等，产出一点不少。
+ *
+ * 取 50 万倍的由头：一帧 16.7ms 最多 1670 跳，会心仍走逐次掷、落在预算内；
+ * 8 小时闭关封顶 2.88e9 跳，还在 double 的整数精度里；再快下去结算本来就要折期望，
+ * 速度已经只剩个数字好看，不如换成每笔金额。
+ */
+export const GATHER_SPEED_CAP = 5e5
+
+/** 两次吐纳之间至少隔这么久（秒），由上限推出来：10 微秒 */
+export const GATHER_MIN_SECONDS = GATHER_PERIOD / GATHER_SPEED_CAP
+
+/**
  * 丹的结算周期（秒）。出丹是条连续的流，不像吐纳那样有进度条要喂，攒够一格才落一次账，
  * 为的是别每帧都动一次 BigNumber；面板上看不见这一格，玩家只看到丹在涨。
  */
@@ -171,10 +191,15 @@ export interface GameState {
   loopEarned: BigNumber
   /** 灵气获取速率（每秒），已含根基与速度 */
   spiritPerSecond: BigNumber
-  /** 进度条走满一次吐纳结算的灵气，与速度无关 */
+  /** 进度条走满一次吐纳结算的灵气。速度在上限以内时与速度无关；超上限的那截已折进这里 */
   spiritPerGather: BigNumber
-  /** 速度倍率，由 speed-mult 法门连乘 */
+  /** 速度倍率，由 speed-mult 法门连乘。已被 `GATHER_SPEED_CAP` 截断，永远是个有限数 */
   gatherSpeed: number
+  /**
+   * 被上限截掉的那一截，log10（0 表示没截）。它已经折算进 `spiritPerGather`，
+   * 这里只留着给界面说明"速度封顶了，多出来的是每笔金额"，不参与结算
+   */
+  gatherOverflowLog10: number
   /** 当前这一格吐纳实际要走的秒数 = 基准 / 速度 */
   gatherSeconds: number
   /** 本次吐纳已积攒的进度，0..1，只给进度条用 */
@@ -252,6 +277,7 @@ function freshState(): GameState {
     spiritPerSecond: BigNumber.from(1),
     spiritPerGather: BigNumber.from(GATHER_PERIOD),
     gatherSpeed: 1,
+    gatherOverflowLog10: 0,
     gatherSeconds: GATHER_PERIOD,
     gatherProgress: 0,
     realmIndex: 0,
@@ -310,6 +336,33 @@ export const shown = reactive({
 
 const DISPLAY_INTERVAL = 0.2
 let displayAcc = DISPLAY_INTERVAL
+
+/**
+ * 会心（紫金葫芦、淬炼那条 crit-add）与炸炉都是"一次一颗一颗掷"的：
+ * 每掷一次推一步种子，同一份进度重放得出同一串结果，探索与凝练也吃这串种子。
+ * 但掷的次数 = 这段时间 / 每跳秒数，而每跳秒数 = 5 / 吐纳速度——速度一旦上万，
+ * **一帧就是几十万次、8 小时闭关是几百亿次**，主线程直接卡死（实测 166 级凝气成珠：
+ * 离线 20 秒要跑 77 秒，8 小时按封顶算是 1e11 次，等于永久卡住）。
+ *
+ * 所以给逐次掷留一个预算：额度内照旧一颗一颗掷，保证手感与可复现；
+ * 超出额度的那一截按期望值折算（掷了 n 次、中 n×chance 次），不推种子、不改概率，
+ * 产出的分布与逐次掷一致，只是不再有那点随机抖动——比卡死强得多。
+ */
+const CRIT_ROLL_BUDGET = 20000
+
+function rollCrits(cycles: number, chance: number): number {
+  if (!(chance > 0) || !(cycles > 0)) return 0
+  // 速度溢出成 Infinity 时（改过的存档）次数也会是 Infinity，这里直接放弃逐次掷
+  if (!Number.isFinite(cycles)) return 0
+  if (cycles > CRIT_ROLL_BUDGET) return Math.round(cycles * Math.min(chance, 1))
+  let crits = 0
+  for (let i = 0; i < cycles; i++) {
+    let roll: number
+    ;[roll, state.seed] = nextRoll(state.seed)
+    if (roll < chance) crits += 1
+  }
+  return crits
+}
 
 export function refreshDisplay(): void {
   shown.spirit = state.spirit.clone()
@@ -626,27 +679,42 @@ export function recompute(): void {
   const energyAdd = globalAdd + exploreMods().energyAdd
   let perSecond = BigNumber.zero()
   let gatherMult = BigNumber.from(1)
-  let speed = 1
+  // 速度按 log10 连乘：法门堆到几千级时，先乘成 double 会溢出成 Infinity，
+  // 那就再也分不出"大到离谱"和"真的溢出"了。log 里累加永远有限，截断才有得截
+  let speedLog = 0
   for (const realm of REALMS) {
     if (realm.upgrades.length === 0) continue
     const p = productionOf(state.levels, realm.upgrades, outputAdd)
     perSecond = perSecond.add(p.perSecond)
     gatherMult = gatherMult.mul(p.gatherMult)
-    speed *= p.speedMult.toNumber()
+    speedLog += p.speedMult.log10()
   }
+  speedLog += t.speedLog
+  const capLog = Math.log10(GATHER_SPEED_CAP)
+  // 等级被写成 Infinity/NaN 的坏档：按 1 倍处理，宁可慢也不许把产出变成 0
+  const safeSpeedLog = Number.isFinite(speedLog) ? speedLog : 0
+  // 超上限的那一截（log10）：留着折成每笔金额的加成，不扔
+  state.gatherOverflowLog10 = safeSpeedLog > capLog ? safeSpeedLog - capLog : 0
+  state.gatherSpeed =
+    state.gatherOverflowLog10 > 0 ? GATHER_SPEED_CAP : Math.pow(10, safeSpeedLog)
+  state.gatherSeconds = GATHER_PERIOD / state.gatherSpeed
   const back =
     (1 + energyAdd + spiritEnergyAdd(state.spirits) + energyBonusAdd(bonus)) *
     jindanReturnMult(state.jindan) *
     (1 + qiAxisAdd(state.pillLevels, state.spirits) + qiBonusAdd(bonus))
-  const rate = BigNumber.from(GATHER_BASE)
+  const base = BigNumber.from(GATHER_BASE)
     .mul(gatherMult)
     .add(perSecond)
     .add(new BigNumber(t.autoBase, 0))
     .mul(BigNumber.fromLog10(t.autoMultLog))
     .mulNumber(back)
+  // 速度被截掉多少倍，每笔金额就乘回多少倍：`每笔 × 速度` 与截断前严丝合缝，
+  // 灵气/秒（连带炼丹、按秒折点）一点没少，只是"格子跳得没那么密、每一笔更大"
+  const rate =
+    state.gatherOverflowLog10 > 0
+      ? base.mul(BigNumber.fromLog10(state.gatherOverflowLog10))
+      : base
   state.gatherCritChance = Math.min(t.critChance + critChance, 1)
-  state.gatherSpeed = speed * BigNumber.fromLog10(t.speedLog).toNumber()
-  state.gatherSeconds = GATHER_PERIOD / state.gatherSpeed
   state.spiritPerGather = rate.mulNumber(GATHER_PERIOD)
   state.spiritPerSecond = rate.mulNumber(state.gatherSpeed)
   // 定价锚只涨不跌：故意自废流量（押一铲探索）再来买丹讨不到便宜
@@ -1080,9 +1148,21 @@ export function rebirthRows(): RebirthQuote[] {
   })
 }
 
-/** 悟性买到的价格削减，法门列表标出折后价 */
+/**
+ * 悟性买到的价格削减。面板念的是**实际砍到的**那一档：
+ * log 涨幅最多砍三分之一（`rebirth.MAX_LOG_CUT`），三条乘法法门的涨幅不同、各自封顶也不同，
+ * 所以取最保守的那条。堆到 27 级以后就不再念一个已经不存在的折扣了。
+ */
 export function rebirthGrowthCut(def: RebirthDef): number {
-  return def.power * (state.rebirth[def.id] ?? 0)
+  const raw = def.power * (state.rebirth[def.id] ?? 0)
+  let usable = raw
+  for (const d of REALMS[CULTIVATE_INDEX].upgrades) {
+    if (d.kind !== 'auto-power' && d.kind !== 'auto-mult' && d.kind !== 'speed-mult') continue
+    const segs = d.segments ?? []
+    const g = segs.length ? segs[segs.length - 1].growth : d.growth
+    usable = Math.min(usable, 1 - growthCutOf(raw, g) / g)
+  }
+  return usable
 }
 
 /** 参悟根骨：一次买 1 级，或把手上的筑基点全花在这条上，买得起才扣 */
@@ -2190,12 +2270,7 @@ function settlePillBatches(cycles: number): void {
   const mode = findPillMode(state.pillMode)
   const bust = bustChance(mode, state.spirits)
   // 先只掷概率：绝大多数帧都是"没炸"，那一段乘法一次做完，炸了才逐炉走 BigNumber
-  let busts = 0
-  for (let i = 0; i < cycles; i++) {
-    let roll: number
-    ;[roll, state.seed] = nextRoll(state.seed)
-    if (roll < bust) busts += 1
-  }
+  const busts = rollCrits(cycles, bust)
   const ok = cycles - busts
   if (ok > 0) state.dan = state.dan.add(state.danPerSecond.mulNumber(ok * PILL_PERIOD * mode.yieldMult))
   if (busts > 0)
@@ -2252,15 +2327,7 @@ export function settleOffline(seconds: number): OfflineReport {
   const cycles = Math.floor((gatherAcc += rep.seconds) / period)
   if (cycles > 0) {
     gatherAcc -= cycles * period
-    let crits = 0
-    const chance = state.gatherCritChance
-    if (chance > 0) {
-      for (let i = 0; i < cycles; i++) {
-        let roll: number
-        ;[roll, state.seed] = nextRoll(state.seed)
-        if (roll < chance) crits += 1
-      }
-    }
+    const crits = rollCrits(cycles, state.gatherCritChance)
     const gain = state.spiritPerGather
       .mulNumber(cycles - crits)
       .add(state.spiritPerGather.mulNumber(crits * GATHER_CRIT_MULT))
@@ -2358,16 +2425,8 @@ function tick(now: number): void {
     const cycles = Math.floor((gatherAcc += dt) / period)
     if (cycles > 0) {
       gatherAcc -= cycles * period
-      // 紫金葫芦的会心按次数逐次掷，同一串种子重放得出同一个结果
-      let crits = 0
-      const chance = state.gatherCritChance
-      if (chance > 0) {
-        for (let i = 0; i < cycles; i++) {
-          let roll: number
-          ;[roll, state.seed] = nextRoll(state.seed)
-          if (roll < chance) crits += 1
-        }
-      }
+      // 会心按次数掷；次数超过额度那一截按期望值折，别让高速度把主线程钉死
+      const crits = rollCrits(cycles, state.gatherCritChance)
       const gain = state.spiritPerGather
         .mulNumber(cycles - crits)
         .add(state.spiritPerGather.mulNumber(crits * GATHER_CRIT_MULT))

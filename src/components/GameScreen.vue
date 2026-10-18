@@ -35,11 +35,22 @@ const isDev = import.meta.env.DEV
 const spiritText = computed(() => fmt(shown.spirit))
 const gatherText = computed(() => fmt(state.spiritPerGather))
 const rateText = computed(() => fmt(state.spiritPerSecond))
-const periodText = computed(() => state.gatherSeconds.toFixed(1).replace(/\.0$/, ''))
+/** 吐纳节拍：慢时念"每几秒一次"；快到 0.1 秒以内改念"每秒几次"，免得念出一串 0 */
+const paceText = computed(() => {
+  const s = state.gatherSeconds
+  if (!(s > 0) || s >= 0.1) return `每 ${(s > 0 ? s : 0).toFixed(1).replace(/\.0$/, '')} 秒一次`
+  const perSecond = 1 / s
+  return perSecond >= 10
+    ? `每秒 ${fmtNum(perSecond, 0)} 次`
+    : `每秒 ${perSecond.toFixed(1).replace(/\.0$/, '')} 次`
+})
 /** 吐纳速度词条生效时才占位，起手期那行还是干净的"每 5 秒一次" */
-const speedText = computed(() =>
-  state.gatherSpeed > 1.005 ? ` · 吐纳速度 ×${state.gatherSpeed.toFixed(2).replace(/\.?0+$/, '')}` : '',
-)
+const speedText = computed(() => {
+  if (!(state.gatherSpeed > 1.005)) return ''
+  const text = ` · 吐纳速度 ×${fmtNum(state.gatherSpeed)}`
+  // 到顶之后超出的那截已经换成每笔金额了，说明一句，免得玩家以为速度卡住不涨
+  return state.gatherOverflowLog10 > 0 ? `${text}（至上限，溢出折进每笔）` : text
+})
 /** 进度条每帧都在走，绑 0..1 的小数就够了，别让模板去算百分比 */
 const gatherWidth = computed(() => `${Math.round(state.gatherProgress * 100)}%`)
 
@@ -191,7 +202,7 @@ const playTime = computed(() => {
           <div class="gather">
             <div class="gather-head">
               <span class="gather-label">吐 纳</span>
-              <span class="gather-sub">每 {{ periodText }} 秒一次{{ speedText }}</span>
+              <span class="gather-sub">{{ paceText }}{{ speedText }}</span>
             </div>
             <div class="gather-bar" role="progressbar" :aria-valuenow="Math.round(state.gatherProgress * 100)">
               <i :style="{ width: gatherWidth }"></i>
