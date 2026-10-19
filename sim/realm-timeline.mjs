@@ -123,5 +123,25 @@ for (const n of [100, 200, 300, 372, 405]) {
 console.log('  405 层之后倍率已经够大：再结丹只多点几百下，不再明显省时间；405 下按 1 秒 1 次也只要几分钟。')
 console.log(`  早段跟着法门加成上调：首丹 ${dur(T0)}，前三层的累计 ${dur(layerTime(T0, 3))}。`)
 
+console.log('\n【阶段六 · 1e80 结婴（0.22 起的门槛）】')
+{
+  // 结婴只看累计灵气 1e80，不必先结到 405 层——层数只是"把最后一世的产量抬到门槛之上"。
+  // 和阶段五同一个算法：空回溯到 1e80 的耗时除以回溯倍率，再加上逐层结丹的时间，取最小值。
+  const base80 = runLife({ mods: mods8, target: 1e80, capSeconds: Infinity })
+  console.log(`  空回溯一世到 1e80：${dur(base80.t)}（乘法轴要除的就是这个量）`)
+  let best80 = null
+  for (let n = 1; n <= 600; n++) {
+    const final = base80.t / jindanReturnMult(n)
+    const total = layerTime(T0, n) + final
+    if (!best80 || total < best80.total) best80 = { n, total, final }
+  }
+  console.log(
+    `  最省：第 ${best80.n} 层 · 结丹 ${dur(layerTime(T0, best80.n))} + 末世 ${dur(best80.final)}` +
+      ` = ${dur(best80.total)}`,
+  )
+  console.log(`  丹纹轮点约 ×0.6：约 ${dur(layerTime(T0, best80.n) * 0.6 + best80.final)}`)
+  console.log('  再往上加层只多花时间；405 层是 1e100 的活，结婴用不到。')
+}
+
 console.log('\n【对照 · 为什么不是加法】旧口径每层 +100%，到 1e100 要 1e70 层；')
 console.log('  丹房那 6%/级同样是加法，堆到 1e70 级也不可达。乘法轴把层数从 1e70 压到 405。')

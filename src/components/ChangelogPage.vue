@@ -45,6 +45,7 @@ const open = reactive<Record<string, boolean>>(
         >
           <span class="head-inner">
             <span class="tag">v{{ entry.version }}</span>
+            <span class="name">{{ entry.title }}</span>
             <span class="date">{{ entry.date }}</span>
             <span class="count">{{ entry.items.length }} 项改动</span>
             <span class="chevron" aria-hidden="true">▾</span>
@@ -203,6 +204,15 @@ const open = reactive<Record<string, boolean>>(
   font-size: 13px;
   letter-spacing: 1px;
   font-variant-numeric: tabular-nums;
+}
+
+/* 名目跟在版本号后面，比日期重一档，让报头自己说得清这一卷讲什么 */
+.name {
+  flex: none;
+  font-size: 14px;
+  letter-spacing: 3px;
+  color: var(--ink-dim);
+  font-family: var(--font-kai);
 }
 
 .date {
